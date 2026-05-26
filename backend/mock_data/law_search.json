@@ -1,0 +1,30 @@
+{
+  "results": [
+    {
+      "article_no": "第 38 條",
+      "title": "特別休假（年假）",
+      "snippet": "勞工在同一雇主或事業單位，繼續工作滿一定期間者，應依下列規定給予特別休假：一、六個月以上一年未滿者，三日。二、一年以上二年未滿者，七日...",
+      "doc_type": "statute",
+      "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=N0030001&flno=38",
+      "relevance_score": 0.95
+    },
+    {
+      "article_no": "第 39 條",
+      "title": "休息日出勤補償",
+      "snippet": "第三十六條所定之例假、休息日、第三十七條所定之休假及第三十八條所定之特別休假，工資應由雇主照給。雇主經徵得勞工同意於休假日工作者，工資應加倍發給。",
+      "doc_type": "statute",
+      "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=N0030001&flno=39",
+      "relevance_score": 0.82
+    },
+    {
+      "article_no": "第 41 條",
+      "title": "特別休假遞延",
+      "snippet": "公用事業之勞工，當地主管機關認有必要時，得停止第三十八條所定之特別休假，但雇主應加倍給其工資。",
+      "doc_type": "statute",
+      "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=N0030001&flno=41",
+      "relevance_score": 0.71
+    }
+  ],
+  "total": 3,
+  "query": "年假"
+}

@@ -1,0 +1,51 @@
+{
+  "risk_level": "high",
+  "headline": "發現 2 項疑似違反勞基法的情況，建議進一步確認",
+  "disclaimer": "本系統提供參考資訊，不構成法律意見。如有爭議，建議諮詢專業律師或勞工局。",
+  "violations": [
+    {
+      "rule_id": "consecutive_days",
+      "status": "suspected_violation",
+      "title": "連續工作天數超過法定上限",
+      "explanation": "依您提供的出勤紀錄，本週連續工作 7 天，超過勞基法第 36 條規定之每 7 日至少 1 日例假規定。",
+      "confidence": "high",
+      "law_references": [
+        {
+          "article_no": "第 36 條",
+          "title": "例假日規定",
+          "snippet": "勞工每七日中應有二日之休息，其中一日為例假，一日為休息日。",
+          "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=N0030001&flno=36"
+        }
+      ],
+      "missing_facts": ["是否有書面同意加班紀錄", "是否有補休安排"]
+    },
+    {
+      "rule_id": "daily_overtime",
+      "status": "warning",
+      "title": "單日工時疑似超過上限",
+      "explanation": "週三出勤紀錄顯示工時達 12.5 小時（含加班），超過勞基法第 32 條每日延長工時上限。",
+      "confidence": "medium",
+      "law_references": [
+        {
+          "article_no": "第 32 條",
+          "title": "延長工時限制",
+          "snippet": "雇主有使勞工在正常工作時間以外工作之必要者，雇主經工會同意，如事業單位無工會者，經勞資會議同意後，得將工作時間延長之。",
+          "source_url": "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=N0030001&flno=32"
+        }
+      ],
+      "missing_facts": ["是否有工會或勞資會議同意書面"]
+    }
+  ],
+  "metrics": {
+    "total_work_minutes": 3240,
+    "total_overtime_minutes": 420,
+    "max_consecutive_days": 7,
+    "avg_daily_minutes": 462.9
+  },
+  "next_actions": [
+    "保留出勤打卡紀錄截圖或列印",
+    "記錄加班時間與實際領取的加班費",
+    "向雇主確認例假安排方式",
+    "如有爭議，可向勞工局申訴或撥打 1955 勞工諮詢專線"
+  ]
+}

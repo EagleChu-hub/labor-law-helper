@@ -1,0 +1,27 @@
+# ── 環境變數（含 API Key，絕對不能上傳）──
+.env
+.env.local
+.env.*.local
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ── ChromaDB 向量索引（雲端會自動以 BM25 fallback）──
+backend/chroma_db/
+
+# ── Node / Next.js ──
+node_modules/
+.next/
+frontend/out/
+
+# ── 系統檔 ──
+.DS_Store
+Thumbs.db
+*.log

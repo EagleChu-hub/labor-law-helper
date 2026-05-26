@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: labor-law-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GOOGLEAI_Studio_API_KEY
+        sync: false          # 在 Render Dashboard 手動填入，不存入 git
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: CHROMA_PATH
+        value: ./chroma_db
+      - key: PYTHONUNBUFFERED
+        value: "1"
