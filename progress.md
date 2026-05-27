@@ -1,6 +1,6 @@
 # 勞基法查詢小幫手 — 開發進度紀錄
 
-> 最後更新：2026-05-26（含 PR8）
+> 最後更新：2026-05-27（含 PR9）
 
 ---
 
@@ -250,6 +250,55 @@
 
 ---
 
+### PR9 — GitHub 開源 + 公開部署（無需終端機）✅
+
+#### 9-1 補假日 dict Bug 修正（後端 + 前端）
+
+**問題**：`national_holidays.py` 和前端 `TAIWAN_HOLIDAYS` 同時收錄了 2026 年四個原始週末節日（02-28、04-04、04-05、10-10）和對應補假日，導致：
+1. `rest_holiday_collisions` 對原始週末日虛假命中，產生「應協商補假」警示
+2. 若勞工在那個週六/週日出勤，`national_holiday` 和 `saturday_pay`/`sunday_work` 雙重違規，金額重複計算
+
+**修正**：移除原始週末日四個 entry，只保留補假日。建立維護規則：「遇週末的節日只加補假日（工作日），原始週末日不列入 dict」。
+
+#### 9-2 OpenSourceAiButtons UX 改進
+
+- **隱私聲明修正**：原「本網站不會把你的資料送出」→ 改為「你的出勤資料只用於本網站法規判斷，**不會傳送給 ChatGPT 或 Gemini**」（更精確，因為出勤資料確實會送後端規則引擎）
+- **自動複製**：點 ChatGPT/Gemini 連結時，`onClick` fire-and-forget `navigator.clipboard.writeText()`，即使使用者跳過「複製提示詞」步驟，連結點下去時提示詞已在剪貼簿
+- **按鈕文字**：加入「步驟 2：」前綴，視覺上引導操作順序
+
+#### 9-3 新增 `frontend/.env.example`
+
+補齊部署所需環境變數範本，讓其他開發者 fork 後知道要填什麼。含 `NEXT_PUBLIC_API_URL` 和 `NEXT_PUBLIC_MODE`。
+
+#### 9-4 README.md 全面改寫
+
+從簡短介紹改寫為完整部署指南：
+- 雙模式架構說明（表格對比）
+- Render 後端部署步驟（含截圖標示）
+- Vercel 前端部署步驟（開源版 + 私人版分開說明）
+- 本機開發啟動指令
+- 語料來源說明
+- 環境變數一覽表
+
+#### 9-5 GitHub 開源 + 推送
+
+- **repo**：`https://github.com/EagleChu-hub/labor-law-helper`（公開）
+- **86 個檔案**，首次提交，包含 `backend/data/raw_chunks_cache.json`（1,727 筆語料快取，Render 部署必需）
+- **已排除**：`backend/.env`（API key）、`frontend/.env.local`、`backend/chroma_db/`（向量索引由 Render 冷啟動重建）
+- **技術注意**：Next.js 建立時會在 `frontend/` 內自動 `git init`，推送父 repo 前需先刪除 `frontend/.git`（隱藏目錄）
+
+#### 9-6 部署完成（無需終端機）
+
+| 服務 | 說明 |
+|------|------|
+| Render 後端 | 連接 GitHub repo，設定 `GOOGLEAI_Studio_API_KEY` 與 `GEMINI_MODEL` |
+| Vercel 開源版 | `NEXT_PUBLIC_MODE=opensource`，公開分享給所有勞工 |
+| Vercel 親友版 | `NEXT_PUBLIC_MODE=private`，私下分享給親友，含完整 AI 對話 |
+
+部署完成後兩個版本永久上線，無需再開終端機。
+
+---
+
 ## 技術決策記錄
 
 | 決策 | 選擇 | 原因 |
@@ -273,15 +322,26 @@
 
 ---
 
-## 部署架構
+## 部署架構（PR9 後，已上線）
 
 ```
-GitHub repo (同一份)
-    ├── Render            後端 FastAPI（需設定環境變數 GOOGLEAI_Studio_API_KEY）
-    ├── Vercel A          前端私人版（NEXT_PUBLIC_MODE=private + NEXT_PUBLIC_API_URL=<Render URL>）
-    └── Vercel B（未來）  前端開源版（NEXT_PUBLIC_MODE=opensource）
+GitHub repo（同一份）
+  https://github.com/EagleChu-hub/labor-law-helper
+  │
+  ├── Render              後端 FastAPI
+  │     GOOGLEAI_Studio_API_KEY=<key>
+  │     GEMINI_MODEL=gemini-2.5-flash
+  │
+  ├── Vercel A（開源公開版）
+  │     NEXT_PUBLIC_API_URL=<Render URL>
+  │     NEXT_PUBLIC_MODE=opensource
+  │
+  └── Vercel B（親友私人版）
+        NEXT_PUBLIC_API_URL=<Render URL>
+        NEXT_PUBLIC_MODE=private
 ```
 
 **重要安全注意事項**
 - `backend/.env` 含真實 Gemini API key，已加入 `.gitignore`，絕不能 commit
 - API key 需在 Render Dashboard 的 Environment 設定 `GOOGLEAI_Studio_API_KEY`
+- `frontend/.env.local` 亦在 `.gitignore`，本機開發用，不上傳 GitHub

@@ -280,15 +280,88 @@ function AskPageInner() {
 
 ---
 
+### ⓬ 國定假日靜態 dict 的補假日維護規則（只加補假日，不加原始週末節日）
+
+當某年國定假日落在週六或週日，法律效力完全轉移到補假日（工作日）。維護 `national_holidays.py` 和前端 `TAIWAN_HOLIDAYS`（`frontend/app/check/page.tsx`）時：
+
+```python
+# ❌ 錯誤：同時放原始節日（週末）和補假日
+"2026-04-04": "兒童節",          # 週六，法律效力已轉移，不該在此
+"2026-04-03": "兒童節（補假）",  # 週五
+
+# ✅ 正確：只放補假日，移除原始週末日
+"2026-04-03": "兒童節（補假）",  # 週五 ← 唯一入口
+```
+
+**若兩個都放，會同時觸發兩個 bug：**
+1. `rest_holiday_collisions` 掃描器對原始週末日（同時是例假/休息日 + 國定假日）命中，產生虛假的「應協商補假」警示
+2. 若勞工恰好在那個週六出勤，`national_holiday` 規則與 `sunday_work`/`saturday_pay` 規則同時 fire，金額重複計算
+
+**每年底新增隔年假日時的 checklist：**
+- 查行政院人事行政總處「政府機關行事曆」確認哪些節日遇週末
+- 遇週末的節日：**只加補假日**（週五或週一），原始週末日不加入 dict
+- comment 標明對應關係（如 `# 4/4 週六 → 補假移至 4/3 週五`）
+- 同步更新兩個地方：`backend/domain/rule_engine/national_holidays.py` 和前端 `TAIWAN_HOLIDAYS`
+
+> 這個維護規則的設計原則等同「台指期結算日」的處理思路：當一個日期的「法律效力」被挪移到另一天，原始日期就不再具有任何特殊身份，不應留在 dict 中。
+
+---
+
+### ⓭ `frontend/` 目錄有獨立 `.git`，推送父 repo 前必須刪除
+
+Next.js `create-next-app` 執行時會自動在 `frontend/` 內 `git init`，形成巢狀 git repo。從父層執行 `git add .` 時 git 視之為 submodule 並報錯：
+
+```
+error: 'frontend/' does not have a commit checked out
+fatal: adding files failed
+```
+
+**修法**：推送前刪除 `frontend/.git`（隱藏資料夾，需在 Windows 檔案總管開啟「顯示隱藏的項目」才看得到）。
+
+> ⚠️ 方向務必正確：刪 `frontend/.git`（子目錄的），**不是** 根目錄的 `.git`（根目錄的 `.git` 是整個專案的 git 歷史，刪了就什麼都沒了）。
+
+---
+
+### ⓮ `OpenSourceAiButtons`：點 AI 連結時應自動複製提示詞（fire-and-forget）
+
+使用者常直接點「開啟 ChatGPT」而跳過「複製提示詞」，到了 ChatGPT 才發現沒東西貼。
+
+**修法**：在 `<a>` 的 `onClick` 裡 fire-and-forget 複製，不阻擋 `href` 導覽：
+
+```tsx
+function handleAiLinkClick() {
+  navigator.clipboard.writeText(prompt).catch(() => {}); // 不 await
+  setCopied(true);
+  setTimeout(() => setCopied(false), 3000);
+}
+<a href={AI_LINKS.chatgpt} target="_blank" onClick={handleAiLinkClick}>
+  🤖 步驟 2：ChatGPT
+</a>
+```
+
+**不能** `await clipboard.writeText()` 後再 `window.open()`——async 結束後呼叫 `window.open()` 可能被瀏覽器 popup blocker 攔截。`<a href>` 不受此限制。
+
+---
+
 ## 部署架構
 
 ```
 GitHub repo（同一份）
-  ├─ Render               後端 FastAPI
+  https://github.com/EagleChu-hub/labor-law-helper
+  │
+  ├─ Render                後端 FastAPI
   │    環境變數：GOOGLEAI_Studio_API_KEY
-  └─ Vercel               前端
+  │             GEMINI_MODEL=gemini-2.5-flash
+  │
+  ├─ Vercel A（開源公開版）前端
+  │    環境變數：NEXT_PUBLIC_API_URL=<Render URL>
+  │             NEXT_PUBLIC_MODE=opensource
+  │
+  └─ Vercel B（親友私人版）前端
        環境變數：NEXT_PUBLIC_API_URL=<Render URL>
-                NEXT_PUBLIC_MODE=private | opensource
+                NEXT_PUBLIC_MODE=private
 ```
 
-Render 免費方案冷啟動約 30 秒，前端第一個 `/check/analyze` 呼叫可能 timeout，重試即可。
+- Render 免費方案閒置 15 分鐘後休眠，冷啟動約 30 秒。前端已內建 65 秒 timeout + 最多 2 次自動重試 + 琥珀色提示橫幅。
+- 開源版不打後端 LLM API，但 `/check/analyze` 和 `/law/search` 仍送至 Render（不吃 LLM quota）。
+- 兩個 Vercel 專案指向同一 GitHub repo，只差環境變數，程式碼完全相同。
