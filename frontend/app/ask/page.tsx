@@ -48,16 +48,23 @@ function AssistantAnswer({ answer }: { answer: AskResponse }) {
       )}
       {answer.law_references.length > 0 && (
         <div className="space-y-1 pt-1 border-t">
-          <p className="text-xs font-medium text-gray-500">引用法條</p>
+          <p className="text-xs font-medium text-gray-500">引用法條與判決</p>
           {answer.law_references.map((ref) => (
             <a
-              key={ref.article_no}
+              key={ref.article_no + ref.title}
               href={ref.source_url || "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className="block text-xs text-teal-700 hover:underline"
+              className="flex items-center gap-1.5 text-xs hover:underline"
             >
-              勞基法 {ref.article_no}：{ref.title}
+              {ref.doc_type === "judgment" ? (
+                <>
+                  <span className="shrink-0 rounded-full bg-orange-100 text-orange-700 px-1.5 py-0.5 font-medium">法院判決</span>
+                  <span className="text-orange-800">{ref.title}</span>
+                </>
+              ) : (
+                <span className="text-teal-700">勞基法 {ref.article_no}：{ref.title}</span>
+              )}
             </a>
           ))}
         </div>

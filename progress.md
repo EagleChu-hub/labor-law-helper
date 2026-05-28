@@ -250,6 +250,35 @@
 
 ---
 
+### PR10 — 真實法院判決引用 ✅
+
+**動機**：原本 RAG 語料只有法條文本，AI 回答只能引用條號。整合法律偵探 `tlr.dr-lawbot.com` 判決搜尋後，每次回答可附上真實法院案號與判決結果，大幅提升說服力。
+
+**設計原則**：Real-time fetch（每次問題才抓 2 筆），不批次爬取，對外部服務友善；10 秒 timeout，失敗靜默降級，不影響現有功能。
+
+**修改**
+- **新增** `backend/domain/retriever/dr_lawbot_retriever.py`：POST `/v1/search`，回傳標準化 `dict`（`doc_type="judgment"`、`is_external=True`），解析 `snippet` 中的「勞動基準法§X」提取 `article_no`
+- **修改** `backend/domain/rag/answer_generator.py`：
+  - `generate_answer()`：`hybrid_search` 之後呼叫 `fetch_judgments(question, top_k=2)`，判決排在條文前面
+  - `_build_context()`：上限 4→6 筆，`doc_type=judgment` 顯示「法院判決」badge
+  - system prompt 第 4 條：新增判決引用格式指示「根據[法院名稱][案號]，[一句話說明]」
+- **修改** `frontend/app/ask/page.tsx`：`law_references` 列表中，`doc_type === "judgment"` 顯示橘色「法院判決」徽章 + 連結至 dr-lawbot.com 原判決頁
+
+**API 格式（`tlr.dr-lawbot.com`）**
+
+```
+POST /v1/search
+{"query": "...", "max_results": 2}
+→ results[].citation_text  # 案號（如「臺灣新竹地方法院 101 年度勞訴字第 29 號」）
+→ results[].snippet        # 含案件摘要、判決結果、引用法條
+→ results[].citation_url   # dr-lawbot.com 原始判決頁連結
+→ results[].jdate          # 判決日期
+```
+
+**關鍵學習**：`requests` 打中文查詢時須 `json.dumps(ensure_ascii=False).encode("utf-8")` 並設 `Content-Type: application/json; charset=utf-8`；直接傳中文字串 API 會回 parse error。
+
+---
+
 ### PR9 — GitHub 開源 + 公開部署（無需終端機）✅
 
 #### 9-1 補假日 dict Bug 修正（後端 + 前端）

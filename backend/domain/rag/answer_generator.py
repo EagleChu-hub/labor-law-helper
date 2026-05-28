@@ -21,7 +21,9 @@ SYSTEM_PROMPT = """你是台灣勞動法專業律師，回答對象是不熟悉�
 2. 每提到一條法條，**緊接著用一段白話翻譯該條文**，不要叫勞工自己去查。
 3. 高風險判斷要保守，但**不要把「請諮詢律師」當作主要結論**——勞工現在就是來找你諮詢的。
    只有在雇主可能否認、或事實未明時，才在該段落最後加一句「如雇主否認，建議撥 1955 或諮詢律師」。
-4. 只能引用「下方提供的條文」，不要捏造法條內容或條號。
+4. 只能引用「下方提供的條文與判決」，不要捏造法條內容、條號或案件字號。
+   若 context 中有【法院判決】，在「你可以主張的權益」段落引用，格式：
+   「根據[法院名稱][案號]（[年份]），[一句話說明判決結果]。」
 5. 若提供的條文不足以回答，誠實說「目前資料無法完整判斷，建議補充 ⋯⋯ 後再評估」。
 6. **區分受僱型態**：若問題涉及工時、例假、加班費，要主動釐清：
    - **月薪制／全職**：適用標準工時（每日 8 小時、每週 40 小時），第 36 條「7 日 1 例 1 休」嚴格適用。
@@ -52,9 +54,10 @@ def _build_context(retrieval_results: list[dict]) -> str:
     if not retrieval_results:
         return "（未找到相關條文）"
     parts = []
-    for r in retrieval_results[:4]:  # 最多 4 條，減少 context 加快回應
+    for r in retrieval_results[:6]:  # 判決 2 + 條文 4
+        badge = "法院判決" if r.get("doc_type") == "judgment" else r.get("doc_type", "statute")
         parts.append(
-            f"【{r.get('doc_type', 'statute')}】{r.get('article_no', '')} "
+            f"【{badge}】{r.get('article_no', '')} "
             f"{r.get('title', '')}\n{r.get('text', '')[:300]}"
         )
     return "\n\n".join(parts)
@@ -195,6 +198,14 @@ def generate_answer(
         except Exception as e:
             logger.warning("Retrieval failed: %s", e)
             retrieval_results = []
+
+    # 即時抓取相關法院判決，排在條文前面讓 Gemini 優先引用
+    try:
+        from domain.retriever.dr_lawbot_retriever import fetch_judgments
+        ext_judgments = fetch_judgments(question, top_k=2)
+        retrieval_results = ext_judgments + retrieval_results
+    except Exception as e:
+        logger.warning("tlr judgment fetch skipped: %s", e)
 
     context = _build_context(retrieval_results)
 
