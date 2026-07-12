@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Copy, Check, MessageSquareText, Sparkles, ChevronUp, ChevronDown } from "lucide-react";
 import { AI_LINKS } from "@/lib/promptTemplate";
 
 interface Props {
@@ -37,12 +38,12 @@ export function OpenSourceAiButtons({ prompt, title }: Props) {
   }
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+    <div className="bg-navy-50 border border-navy-100 rounded-2xl p-4 space-y-3">
       <div>
-        <h3 className="font-semibold text-indigo-900 text-sm">
+        <h3 className="font-black text-navy-900 text-sm">
           {title ?? "🤖 用 AI 律師幫你分析"}
         </h3>
-        <p className="text-xs text-indigo-700/80 mt-0.5">
+        <p className="text-xs text-navy-600 mt-0.5">
           你的出勤資料只用於本網站法規判斷，<strong>不會傳送給 ChatGPT 或 Gemini</strong>。
           請：① 複製提示詞 → ② 點開任一 AI 服務 → ③ 貼上送出。
         </p>
@@ -50,13 +51,14 @@ export function OpenSourceAiButtons({ prompt, title }: Props) {
 
       <button
         onClick={copyToClipboard}
-        className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
+        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-colors ${
           copied
-            ? "bg-green-600 text-white"
-            : "bg-indigo-700 text-white hover:bg-indigo-800"
+            ? "bg-ok text-white"
+            : "bg-gradient-to-b from-navy-600 to-navy-800 text-white hover:brightness-110"
         }`}
       >
-        {copied ? "✓ 已複製！點下方任一 AI 服務貼上即可" : "📋 步驟 1：複製 AI 提示詞"}
+        {copied ? <Check size={16} /> : <Copy size={16} />}
+        {copied ? "已複製！點下方任一 AI 服務貼上即可" : "步驟 1：複製 AI 提示詞"}
       </button>
 
       <div className="grid grid-cols-2 gap-2">
@@ -65,29 +67,30 @@ export function OpenSourceAiButtons({ prompt, title }: Props) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleAiLinkClick}
-          className="py-2.5 text-center rounded-lg bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:border-indigo-400 hover:text-indigo-700"
+          className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-card border border-line text-ink text-sm font-semibold hover:border-navy-600 hover:text-navy-700"
         >
-          🤖 步驟 2：ChatGPT
+          <MessageSquareText size={15} /> 步驟 2：ChatGPT
         </a>
         <a
           href={AI_LINKS.gemini}
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleAiLinkClick}
-          className="py-2.5 text-center rounded-lg bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:border-indigo-400 hover:text-indigo-700"
+          className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-card border border-line text-ink text-sm font-semibold hover:border-gold hover:text-gold-deep"
         >
-          ✨ 步驟 2：Gemini
+          <Sparkles size={15} /> 步驟 2：Gemini
         </a>
       </div>
 
       <button
         onClick={() => setShowPreview((v) => !v)}
-        className="text-xs text-indigo-600 hover:underline"
+        className="flex items-center gap-1 text-xs text-navy-600 hover:underline"
       >
-        {showPreview ? "▲ 收合預覽" : "▼ 預覽提示詞內容"}
+        {showPreview ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        {showPreview ? "收合預覽" : "預覽提示詞內容"}
       </button>
       {showPreview && (
-        <pre className="text-xs text-gray-600 bg-white border rounded p-3 whitespace-pre-wrap max-h-60 overflow-y-auto">
+        <pre className="text-xs text-muted bg-card border border-line rounded-lg p-3 whitespace-pre-wrap max-h-60 overflow-y-auto">
           {prompt}
         </pre>
       )}

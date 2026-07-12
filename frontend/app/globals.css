@@ -3,21 +3,41 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --ink: #1b2236;
+  --muted: #626b80;
+  --canvas: #f1eee7;
+  --card: #ffffff;
+  --line: #e7e2d7;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --navy: #2c3c6b;
+  --navy-900: #181f38;
+  --navy-800: #212c4f;
+  --navy-600: #3c4c78;
+  --navy-100: #e4e7f0;
+  --navy-50: #f0f1f6;
+
+  --gold: #b8862f;
+  --gold-deep: #815e20;
+  --gold-soft: #f3e9d7;
+  --gold-border: #dcc191;
+
+  --red: #d24a45;
+  --red-deep: #a83a36;
+  --red-soft: #fbeceb;
+  --red-border: #f2cbc8;
+
+  --amber: #c98a2a;
+  --amber-soft: #fbf1db;
+  --amber-border: #ecd8a8;
+
+  --green: #2f8f66;
+  --green-soft: #e6f3ec;
+  --green-border: #c2e2ce;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
 }
 
 @layer utilities {

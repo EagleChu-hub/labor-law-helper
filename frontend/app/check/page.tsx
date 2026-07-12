@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { User, Clock, Users, Coins, ChevronRight, Loader2 } from "lucide-react";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
 import type { AttendanceRecord, CheckRequest } from "@/types";
 
@@ -314,72 +315,84 @@ export default function CheckPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">你今天有沒有被坑？</h1>
-        <p className="text-sm text-gray-500 mt-1">填一週出勤，3 秒幫你算可能短少的薪水與假日</p>
+        <h1 className="text-2xl font-black text-ink">你今天有沒有被坑？</h1>
+        <p className="text-[15px] text-muted mt-1">填一週出勤，3 秒幫你算可能短少的薪水與假日</p>
       </div>
 
       {/* Stepper */}
       <div className="flex items-center gap-2">
         {STEPS.map((label, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${i <= step ? "bg-teal-700 text-white" : "bg-gray-200 text-gray-500"}`}>
+          <div key={i} className="flex items-center gap-2.5">
+            <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-sm font-bold font-sora ${i <= step ? "bg-navy text-white" : "bg-card border-2 border-line text-muted"}`}>
               {i < step ? "✓" : i + 1}
             </div>
-            <span className={`text-sm ${i === step ? "text-teal-700 font-semibold" : "text-gray-400"}`}>{label}</span>
-            {i < STEPS.length - 1 && <div className="h-px bg-gray-200 w-6" />}
+            <span className={`text-sm ${i === step ? "text-navy font-bold" : "text-muted font-medium"}`}>{label}</span>
+            {i < STEPS.length - 1 && <div className="h-0.5 bg-line w-6" />}
           </div>
         ))}
       </div>
 
       {/* ── Step 0: 雇用類型 + 國定假日補休 ── */}
       {step === 0 && (
-        <div className="bg-white rounded-xl border p-5 space-y-4">
-          <h2 className="font-semibold text-gray-700">你的雇用類型是？</h2>
+        <div className="bg-card rounded-[20px] border border-line shadow-sm p-6 space-y-5">
+          <h2 className="font-black text-[19px] text-ink">你的雇用類型是？</h2>
           <div className="grid gap-3">
             {[
-              { value: "monthly_salary", label: "月薪制", desc: "固定每月薪資，最常見的雇用方式" },
-              { value: "hourly",         label: "時薪制", desc: "依工作時數計薪，兼職常見（預設休息時間自動調整為 30 分鐘）" },
-              { value: "dispatch",       label: "派遣勞工", desc: "透過派遣公司派至其他公司工作" },
-            ].map((opt) => (
-              <label key={opt.value} className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${employmentType === opt.value ? "border-teal-500 bg-teal-50" : "border-gray-200 hover:border-gray-300"}`}>
-                <input type="radio" name="employment" value={opt.value}
-                  checked={employmentType === opt.value as CheckRequest["employment_type"]}
-                  onChange={() => setEmploymentType(opt.value as CheckRequest["employment_type"])}
-                  className="mt-0.5 accent-teal-700"
-                />
-                <div>
-                  <div className="font-medium text-gray-800">{opt.label}</div>
-                  <div className="text-sm text-gray-500">{opt.desc}</div>
-                </div>
-              </label>
-            ))}
+              { value: "monthly_salary", label: "月薪制", desc: "固定每月薪資，最常見的雇用方式", Icon: User },
+              { value: "hourly",         label: "時薪制", desc: "依工作時數計薪，兼職常見（預設休息時間自動調整為 30 分鐘）", Icon: Clock },
+              { value: "dispatch",       label: "派遣勞工", desc: "透過派遣公司派至其他公司工作", Icon: Users },
+            ].map((opt) => {
+              const selected = employmentType === (opt.value as CheckRequest["employment_type"]);
+              return (
+                <label key={opt.value} className={`flex items-center gap-4 px-5 py-[18px] rounded-[15px] border cursor-pointer transition-colors ${selected ? "border-2 border-navy bg-navy-50" : "border-[1.5px] border-line bg-card hover:border-navy-100"}`}>
+                  <span className={`w-[22px] h-[22px] rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? "border-navy" : "border-line"}`}>
+                    {selected && <span className="w-[11px] h-[11px] rounded-full bg-navy" />}
+                  </span>
+                  <span className={`w-[42px] h-[42px] rounded-xl flex items-center justify-center shrink-0 text-navy ${selected ? "bg-white border border-navy-100" : "bg-navy-50"}`}>
+                    <opt.Icon size={21} strokeWidth={1.75} />
+                  </span>
+                  <input type="radio" name="employment" value={opt.value}
+                    checked={selected}
+                    onChange={() => setEmploymentType(opt.value as CheckRequest["employment_type"])}
+                    className="sr-only"
+                  />
+                  <span className="flex-1">
+                    <span className="block text-base font-extrabold text-ink">{opt.label}</span>
+                    <span className="block text-[13.5px] text-muted mt-0.5">{opt.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
 
           {/* 時薪輸入（選填） */}
-          <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+          <div className="rounded-[15px] border border-gold-border bg-gold-soft p-5 space-y-3">
             <div>
-              <h3 className="text-sm font-semibold text-amber-900">💰 時薪資訊（選填，幫你算可能少領多少）</h3>
-              <p className="text-xs text-amber-700/80 mt-0.5">填了我就幫你算具體金額；不填也能跑，只是看不到「NT$ X 元」這種數字</p>
+              <h3 className="flex items-center gap-2 text-[15px] font-extrabold text-gold-deep">
+                <Coins size={18} strokeWidth={1.9} />
+                時薪資訊（選填，幫你算可能少領多少）
+              </h3>
+              <p className="text-[13px] text-gold-deep mt-0.5 ml-[26px]">填了我就幫你算具體金額；不填也能跑，只是看不到「NT$ X 元」這種數字</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3.5">
               <div>
-                <label className="text-xs text-gray-600">平日時薪 NT$</label>
+                <label className="text-[13px] font-bold text-ink">平日時薪 NT$</label>
                 <input
                   type="number" inputMode="numeric" min={0}
                   value={hourlyRegular}
                   onChange={(e) => setHourlyRegular(e.target.value)}
                   placeholder="如 200"
-                  className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  className="w-full mt-1.5 border border-gold-border rounded-[11px] px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gold"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-600">假日時薪 NT$（選填）</label>
+                <label className="text-[13px] font-bold text-ink">假日時薪 NT$（選填）</label>
                 <input
                   type="number" inputMode="numeric" min={0}
                   value={hourlyHoliday}
                   onChange={(e) => setHourlyHoliday(e.target.value)}
                   placeholder="留空 = 用法定倍率推算"
-                  className="w-full mt-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  className="w-full mt-1.5 border border-gold-border rounded-[11px] px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gold"
                 />
               </div>
             </div>
@@ -393,22 +406,22 @@ export default function CheckPage() {
               .sort();
             if (holidaysInRange.length === 0) return null;
             return (
-              <div className="rounded-lg border border-gray-200 bg-gray-50/50">
+              <div className="rounded-[13px] border border-line bg-canvas">
                 <button
                   type="button"
                   onClick={() => setHolidayPanelOpen((v) => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-ink"
                 >
                   <span>🗓️ 國定假日補休調整（選填）</span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted">
                     {Object.keys(holidayOverrides).length > 0
                       ? `已設定 ${Object.keys(holidayOverrides).length} 筆 ${holidayPanelOpen ? "▲" : "▼"}`
                       : `${holidaysInRange.length} 個假日 ${holidayPanelOpen ? "▲" : "▼"}`}
                   </span>
                 </button>
                 {holidayPanelOpen && (
-                  <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-500">
+                  <div className="px-4 pb-4 pt-1 space-y-3 border-t border-line">
+                    <p className="text-xs text-muted">
                       若國定假日與你的例假日／休息日重疊，雇主應與你協商擇日補休。
                       在此填入補休改到的日期，系統會把該日當作國定假日計算（出勤須給雙倍工資）。
                       <span className="block mt-1">留空表示沒挪動。</span>
@@ -419,11 +432,11 @@ export default function CheckPage() {
                         const compDate = holidayOverrides[d] ?? "";
                         return (
                           <div key={d} className="flex items-center gap-2 text-sm">
-                            <span className="text-red-600 font-medium w-32 shrink-0">
+                            <span className="text-danger font-medium w-32 shrink-0">
                               {d.replace(/-/g, "/")}
                             </span>
-                            <span className="text-gray-700 w-20 shrink-0">{name}</span>
-                            <span className="text-gray-400 text-xs">補休改到</span>
+                            <span className="text-ink w-20 shrink-0">{name}</span>
+                            <span className="text-muted text-xs">補休改到</span>
                             <input
                               type="date"
                               value={compDate}
@@ -436,7 +449,7 @@ export default function CheckPage() {
                                   return next;
                                 });
                               }}
-                              className="flex-1 min-w-0 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                              className="flex-1 min-w-0 border border-line rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-navy"
                             />
                             {compDate && (
                               <button
@@ -444,7 +457,7 @@ export default function CheckPage() {
                                 onClick={() => setHolidayOverrides((prev) => {
                                   const next = { ...prev }; delete next[d]; return next;
                                 })}
-                                className="text-xs text-red-400 hover:underline"
+                                className="text-xs text-danger hover:underline"
                               >
                                 清除
                               </button>
@@ -459,8 +472,8 @@ export default function CheckPage() {
             );
           })()}
 
-          <button onClick={() => setStep(1)} className="w-full bg-teal-700 text-white py-3 rounded-xl font-semibold hover:bg-teal-800 transition-colors">
-            下一步
+          <button onClick={() => setStep(1)} className="w-full flex items-center justify-center gap-2 bg-gradient-to-b from-navy-600 to-navy-800 text-white py-3.5 rounded-xl font-bold shadow-[0_12px_24px_-14px_var(--navy-900)] hover:brightness-110 transition">
+            下一步 <ChevronRight size={17} />
           </button>
         </div>
       )}
@@ -469,28 +482,28 @@ export default function CheckPage() {
       {step === 1 && (
         <div className="space-y-4">
           {/* Calendar card */}
-          <div className="bg-white rounded-xl border p-4 space-y-3">
+          <div className="bg-card rounded-2xl border border-line shadow-sm p-5 space-y-3.5">
             <div>
-              <h2 className="font-semibold text-gray-700">點選你有出勤的日期</h2>
-              <p className="text-xs text-gray-400 mt-0.5">未點選 = 休息日；系統自動判定例假日與休息日，不需手動設定</p>
+              <h2 className="font-black text-[17px] text-ink">點選你有出勤的日期</h2>
+              <p className="text-xs text-muted mt-0.5">未點選 = 休息日；系統自動判定例假日與休息日，不需手動設定</p>
             </div>
 
             {/* Quick-select buttons */}
             <div className="flex flex-wrap gap-2">
               <button onClick={() => selectWeekdays([1, 2, 3, 4, 5])}
-                className="text-xs bg-teal-50 border border-teal-300 text-teal-700 rounded-full px-3 py-1 hover:bg-teal-100">
+                className="text-xs bg-navy-50 border border-navy-100 text-navy-600 font-semibold rounded-full px-3 py-1 hover:bg-navy-100">
                 週一至週五
               </button>
               <button onClick={() => selectWeekdays([2, 3, 4, 5, 6])}
-                className="text-xs bg-teal-50 border border-teal-300 text-teal-700 rounded-full px-3 py-1 hover:bg-teal-100">
+                className="text-xs bg-navy-50 border border-navy-100 text-navy-600 font-semibold rounded-full px-3 py-1 hover:bg-navy-100">
                 週二至週六
               </button>
               <button onClick={() => selectWeekdays([1, 2, 3, 4, 5, 6])}
-                className="text-xs bg-teal-50 border border-teal-300 text-teal-700 rounded-full px-3 py-1 hover:bg-teal-100">
+                className="text-xs bg-navy-50 border border-navy-100 text-navy-600 font-semibold rounded-full px-3 py-1 hover:bg-navy-100">
                 週一至週六
               </button>
               <button onClick={clearAll}
-                className="text-xs bg-gray-50 border border-gray-200 text-gray-500 rounded-full px-3 py-1 hover:bg-gray-100">
+                className="text-xs bg-canvas border border-line text-muted rounded-full px-3 py-1 hover:bg-line">
                 清除全部
               </button>
             </div>
@@ -499,16 +512,16 @@ export default function CheckPage() {
             <div className="flex items-center justify-between text-xs">
               <button
                 onClick={() => setWeeksPast((w) => w + 8)}
-                className="text-teal-700 hover:underline"
+                className="text-navy-600 font-semibold hover:underline"
               >
                 ↑ 看更早 2 個月
               </button>
-              <span className="text-gray-400">
+              <span className="text-muted">
                 顯示範圍：{calendarWeeks[0][0].slice(0, 7).replace("-", "/")} ~ {calendarWeeks[calendarWeeks.length - 1][6].slice(0, 7).replace("-", "/")}
               </span>
               <button
                 onClick={() => setWeeksFuture((w) => w + 4)}
-                className="text-teal-700 hover:underline"
+                className="text-navy-600 font-semibold hover:underline"
               >
                 看更晚 1 個月 ↓
               </button>
@@ -517,14 +530,14 @@ export default function CheckPage() {
             {/* Calendar grid（可上下捲動） */}
             <div
               ref={calendarScrollRef}
-              className="max-h-80 overflow-y-auto border border-gray-100 rounded-lg"
+              className="max-h-80 overflow-y-auto border border-line rounded-lg"
             >
               <table className="w-full text-center select-none">
-                <thead className="sticky top-0 bg-white z-10">
+                <thead className="sticky top-0 bg-card z-10">
                   <tr>
                     <th className="w-8" />
                     {WEEKDAY_HEADER.map((h) => (
-                      <th key={h} className="py-1 text-[11px] text-gray-400 font-medium">{h}</th>
+                      <th key={h} className="py-1 text-[11px] text-muted font-medium">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -541,7 +554,7 @@ export default function CheckPage() {
                       <tr key={wi} ref={isTodayRow ? todayRowRef : null}>
                         <td className="text-right pr-1 align-middle">
                           {showMonth && (
-                            <span className="text-[10px] font-semibold text-teal-700 whitespace-nowrap">
+                            <span className="text-[10px] font-semibold text-navy-600 whitespace-nowrap">
                               {monthLabel}
                             </span>
                           )}
@@ -581,28 +594,28 @@ export default function CheckPage() {
                                   isFirstDay ? "text-[9px]" : "text-xs",
                                   // 選取狀態（最優先）
                                   isSel && isAgreedOt ? "bg-orange-500 text-white shadow-sm ring-2 ring-orange-300" : "",
-                                  isSel && !isAgreedOt ? "bg-teal-600 text-white shadow-sm" : "",
+                                  isSel && !isAgreedOt ? "bg-navy text-white shadow-sm" : "",
                                   // 未選取
-                                  !isSel && isToday ? "ring-2 ring-teal-400 text-teal-700" : "",
-                                  !isSel && isLiveMand ? "bg-rose-100 text-rose-700 ring-2 ring-rose-400" : "",
-                                  !isSel && isLiveReg && !isLiveMand ? "bg-sky-100 text-sky-700 ring-1 ring-sky-400" : "",
-                                  !isSel && !isLiveMand && !isLiveReg && isFuture ? "bg-blue-50/50 text-gray-500 hover:bg-blue-100" : "",
-                                  !isSel && !isLiveMand && !isLiveReg && isWkend && !isFuture ? "bg-gray-50 text-gray-400 hover:bg-gray-100" : "",
-                                  !isSel && !isLiveMand && !isLiveReg && !isWkend && !isFuture ? "hover:bg-gray-100 text-gray-700" : "",
+                                  !isSel && isToday ? "ring-2 ring-navy-600 text-navy-700" : "",
+                                  !isSel && isLiveMand ? "bg-danger-soft text-danger-deep ring-2 ring-danger-border" : "",
+                                  !isSel && isLiveReg && !isLiveMand ? "bg-navy-50 text-navy-600 ring-1 ring-navy-100" : "",
+                                  !isSel && !isLiveMand && !isLiveReg && isFuture ? "bg-navy-50 text-muted hover:bg-navy-100" : "",
+                                  !isSel && !isLiveMand && !isLiveReg && isWkend && !isFuture ? "bg-canvas text-muted hover:bg-line" : "",
+                                  !isSel && !isLiveMand && !isLiveReg && !isWkend && !isFuture ? "hover:bg-navy-50 text-ink" : "",
                                 ].filter(Boolean).join(" ")}
                               >
                                 {dayDisplay}
                                 {isToday && (
-                                  <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[7px] leading-none font-bold ${isSel ? "text-teal-200" : "text-teal-600"}`}>今</span>
+                                  <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[7px] leading-none font-bold ${isSel ? "text-white/80" : "text-navy-600"}`}>今</span>
                                 )}
                                 {isHoliday && (
-                                  <span className={`absolute top-0 right-0.5 text-[7px] leading-none font-bold ${isSel ? "text-red-200" : "text-red-500"}`}>假</span>
+                                  <span className={`absolute top-0 right-0.5 text-[7px] leading-none font-bold ${isSel ? "text-danger-soft" : "text-danger"}`}>假</span>
                                 )}
                                 {isAgreedOt && isSel && (
                                   <span className="absolute top-0 left-0.5 text-[7px] leading-none font-bold text-white">OT</span>
                                 )}
                                 {hasOvr && isSel && !isAgreedOt && (
-                                  <span className="absolute bottom-0.5 right-0.5 w-1 h-1 bg-yellow-400 rounded-full" />
+                                  <span className="absolute bottom-0.5 right-0.5 w-1 h-1 bg-gold rounded-full" />
                                 )}
                               </button>
                             </td>
@@ -625,9 +638,9 @@ export default function CheckPage() {
               if (workedOnRestDay.length === 0 && workedOnMandRest.length === 0) return null;
 
               return (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <div className="bg-warn-soft border border-warn-border rounded-lg p-3 space-y-2">
                   {workedOnMandRest.length > 0 && (
-                    <p className="text-xs text-red-700">
+                    <p className="text-xs text-danger-deep">
                       🚨 偵測到你在<span className="font-bold">例假日</span>出勤
                       （{workedOnMandRest.map((d) => d.slice(5).replace("-", "/")).join("、")}）。
                       依勞基法第 36、40 條，例假日除天災事變外不得出勤。
@@ -649,7 +662,7 @@ export default function CheckPage() {
                             <button
                               key={d}
                               onClick={() => toggleAgreedOt(d)}
-                              className="text-xs bg-white border border-orange-300 text-orange-700 rounded-full px-2 py-0.5 hover:bg-orange-50"
+                              className="text-xs bg-card border border-orange-300 text-orange-700 rounded-full px-2 py-0.5 hover:bg-orange-50"
                             >
                               + {d.slice(5).replace("-", "/")}（週{lbl}）標為約定加班
                             </button>
@@ -662,9 +675,9 @@ export default function CheckPage() {
               );
             })()}
 
-            <div className="text-[11px] text-gray-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <div className="text-[11px] text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 bg-teal-600 rounded" /> 一般出勤
+                <span className="inline-block w-3 h-3 bg-navy rounded" /> 一般出勤
               </span>
               <span className="flex items-center gap-1">
                 <span className="inline-block w-3 h-3 bg-orange-500 rounded relative">
@@ -672,18 +685,18 @@ export default function CheckPage() {
                 </span> 約定加班
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 bg-rose-100 ring-2 ring-rose-400 rounded" /> 偵測例假日
+                <span className="inline-block w-3 h-3 bg-danger-soft ring-2 ring-danger-border rounded" /> 偵測例假日
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 bg-sky-100 ring-1 ring-sky-400 rounded" /> 偵測休息日
+                <span className="inline-block w-3 h-3 bg-navy-50 ring-1 ring-navy-100 rounded" /> 偵測休息日
               </span>
-              <span><span className="text-red-500 font-bold">假</span> 國定假日</span>
+              <span><span className="text-danger font-bold">假</span> 國定假日</span>
             </div>
           </div>
 
           {/* Default shift */}
-          <div className="bg-white rounded-xl border p-4 space-y-3">
-            <h3 className="font-semibold text-gray-700 text-sm">預設班次（套用至所有選取日）</h3>
+          <div className="bg-card rounded-2xl border border-line shadow-sm p-4 space-y-3">
+            <h3 className="font-bold text-ink text-sm">預設班次（套用至所有選取日）</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {([
                 { key: "clock_in",         label: "上班時間", type: "time"   },
@@ -692,12 +705,12 @@ export default function CheckPage() {
                 { key: "overtime_minutes", label: "加班（分）", type: "number" },
               ] as const).map(({ key, label, type }) => (
                 <div key={key}>
-                  <label className="text-xs text-gray-500">{label}</label>
+                  <label className="text-xs text-muted">{label}</label>
                   <input
                     type={type} min={type === "number" ? 0 : undefined}
                     value={defaultShift[key]}
                     onChange={(e) => setDefaultShift((s) => ({ ...s, [key]: type === "number" ? +e.target.value : e.target.value }))}
-                    className="w-full mt-1 border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full mt-1 border border-line rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
                   />
                 </div>
               ))}
@@ -706,10 +719,10 @@ export default function CheckPage() {
 
           {/* Per-day overrides */}
           {sortedSelected.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 space-y-2">
+            <div className="bg-card rounded-2xl border border-line shadow-sm p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-700 text-sm">個別設定（已選 {sortedSelected.length} 天）</h3>
-                <span className="text-xs text-gray-400">點開可修改單日時間</span>
+                <h3 className="font-bold text-ink text-sm">個別設定（已選 {sortedSelected.length} 天）</h3>
+                <span className="text-xs text-muted">點開可修改單日時間</span>
               </div>
               <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                 {sortedSelected.map((date) => {
@@ -720,25 +733,25 @@ export default function CheckPage() {
                   const holiday = TAIWAN_HOLIDAYS[date];
                   const hasOvr  = overrides.has(date);
                   return (
-                    <div key={date} className={`rounded-lg border ${hasOvr ? "border-yellow-300 bg-yellow-50" : "border-gray-100"}`}>
+                    <div key={date} className={`rounded-lg border ${hasOvr ? "border-gold-border bg-gold-soft" : "border-line"}`}>
                       <button
                         onClick={() => setExpandedDate(isExp ? null : date)}
                         className="w-full flex items-center justify-between px-3 py-2 text-sm"
                       >
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-ink">
                           {date.slice(5).replace("-", "/")} 週{dayLbl}
-                          {holiday && <span className="ml-1 text-[11px] text-red-500 font-normal">（{holiday}）</span>}
+                          {holiday && <span className="ml-1 text-[11px] text-danger font-normal">（{holiday}）</span>}
                           {agreedOtDates.has(date) && (
                             <span className="ml-1 text-[11px] bg-orange-500 text-white px-1.5 py-0.5 rounded font-normal">約定加班</span>
                           )}
-                          {hasOvr && <span className="ml-1 text-[11px] text-yellow-600">已修改</span>}
+                          {hasOvr && <span className="ml-1 text-[11px] text-gold-deep">已修改</span>}
                         </span>
-                        <span className="text-xs text-gray-400">{shift.clock_in}–{shift.clock_out} {isExp ? "▲" : "▼"}</span>
+                        <span className="text-xs text-muted">{shift.clock_in}–{shift.clock_out} {isExp ? "▲" : "▼"}</span>
                       </button>
                       {isExp && (
-                        <div className="px-3 pb-3 pt-2 border-t border-gray-100 space-y-2">
+                        <div className="px-3 pb-3 pt-2 border-t border-line space-y-2">
                           {/* 約定休息日加班 toggle */}
-                          <label className={`flex items-center gap-2 p-2 rounded-md cursor-pointer ${agreedOtDates.has(date) ? "bg-orange-50 border border-orange-200" : "bg-gray-50 border border-gray-200"}`}>
+                          <label className={`flex items-center gap-2 p-2 rounded-md cursor-pointer ${agreedOtDates.has(date) ? "bg-orange-50 border border-orange-200" : "bg-canvas border border-line"}`}>
                             <input
                               type="checkbox"
                               checked={agreedOtDates.has(date)}
@@ -746,10 +759,10 @@ export default function CheckPage() {
                               className="accent-orange-500"
                             />
                             <div className="flex-1">
-                              <div className="text-sm font-medium text-gray-800">
+                              <div className="text-sm font-medium text-ink">
                                 與雇主約定的休息日加班
                               </div>
-                              <div className="text-xs text-gray-500">
+                              <div className="text-xs text-muted">
                                 依勞基法第 24 條計算加班費（前 2h ×1.34、2-8h ×1.67、超過 8h ×2.67）
                               </div>
                             </div>
@@ -763,12 +776,12 @@ export default function CheckPage() {
                               { key: "overtime_minutes", label: "加班（分）", type: "number" },
                             ] as const).map(({ key, label, type }) => (
                               <div key={key}>
-                                <label className="text-xs text-gray-400">{label}</label>
+                                <label className="text-xs text-muted">{label}</label>
                                 <input
                                   type={type} min={type === "number" ? 0 : undefined}
                                   value={shift[key]}
                                   onChange={(e) => updateOverride(date, key, type === "number" ? +e.target.value : e.target.value)}
-                                  className="w-full mt-0.5 border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  className="w-full mt-0.5 border border-line rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-navy"
                                 />
                               </div>
                             ))}
@@ -776,7 +789,7 @@ export default function CheckPage() {
                           {hasOvr && (
                             <button
                               onClick={() => setOverrides((m) => { const n = new Map(m); n.delete(date); return n; })}
-                              className="text-xs text-red-400 text-left hover:underline"
+                              className="text-xs text-danger text-left hover:underline"
                             >
                               恢復預設時間
                             </button>
@@ -791,15 +804,15 @@ export default function CheckPage() {
           )}
 
           <div className="flex gap-3">
-            <button onClick={() => setStep(0)} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">
+            <button onClick={() => setStep(0)} className="flex-1 py-3 border border-line rounded-xl text-sm font-medium text-muted hover:bg-card">
               上一步
             </button>
             <button
               onClick={goToStep2}
               disabled={selectedDates.size === 0}
-              className="flex-1 bg-teal-700 text-white py-3 rounded-xl font-semibold hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-b from-navy-600 to-navy-800 text-white py-3 rounded-xl font-bold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              下一步（已選 {selectedDates.size} 天）
+              下一步（已選 {selectedDates.size} 天）<ChevronRight size={17} />
             </button>
           </div>
         </div>
@@ -807,41 +820,41 @@ export default function CheckPage() {
 
       {/* ── Step 2: 確認 ── */}
       {step === 2 && detectedRest && (
-        <div className="bg-white rounded-xl border p-5 space-y-4">
-          <h2 className="font-semibold text-gray-700">確認資料</h2>
-          <div className="space-y-2 text-sm text-gray-600">
-            <div className="flex justify-between py-2 border-b">
-              <span>雇用類型</span>
-              <span className="font-medium text-gray-800">{{ monthly_salary: "月薪制", hourly: "時薪制", dispatch: "派遣" }[employmentType]}</span>
+        <div className="bg-card rounded-[20px] border border-line shadow-sm p-6 space-y-4">
+          <h2 className="font-black text-[19px] text-ink">確認資料</h2>
+          <div className="space-y-2 text-sm text-ink">
+            <div className="flex justify-between py-2 border-b border-line">
+              <span className="text-muted">雇用類型</span>
+              <span className="font-medium text-ink">{{ monthly_salary: "月薪制", hourly: "時薪制", dispatch: "派遣" }[employmentType]}</span>
             </div>
-            <div className="flex justify-between py-2 border-b">
-              <span>出勤天數</span>
-              <span className="font-medium text-gray-800">{selectedDates.size} 天</span>
+            <div className="flex justify-between py-2 border-b border-line">
+              <span className="text-muted">出勤天數</span>
+              <span className="font-medium text-ink">{selectedDates.size} 天</span>
             </div>
             {totalMinutes > 0 && (
-              <div className="flex justify-between py-2 border-b">
-                <span>合計工時</span>
-                <span className="font-medium text-gray-800">
+              <div className="flex justify-between py-2 border-b border-line">
+                <span className="text-muted">合計工時</span>
+                <span className="font-medium text-ink">
                   {(totalMinutes / 60).toFixed(1)} 小時
                   {selectedDates.size > 0 && (
-                    <span className="text-gray-400 font-normal text-xs ml-1">
+                    <span className="text-muted font-normal text-xs ml-1">
                       （平均每天 {(totalMinutes / 60 / selectedDates.size).toFixed(1)} 小時）
                     </span>
                   )}
                 </span>
               </div>
             )}
-            <div className="flex justify-between py-2 border-b">
-              <span>預設班次</span>
-              <span className="font-medium text-gray-800">{defaultShift.clock_in}–{defaultShift.clock_out}（休息 {defaultShift.break_minutes} 分）</span>
+            <div className="flex justify-between py-2 border-b border-line">
+              <span className="text-muted">預設班次</span>
+              <span className="font-medium text-ink">{defaultShift.clock_in}–{defaultShift.clock_out}（休息 {defaultShift.break_minutes} 分）</span>
             </div>
-            <div className="py-2 border-b">
+            <div className="py-2 border-b border-line">
               <div className="flex justify-between mb-1">
-                <span>系統判定例假日（每 7 天至少 1 天）</span>
-                <span className="text-xs text-gray-400">{detectedRest.mandatory.size} 天</span>
+                <span className="text-muted">系統判定例假日（每 7 天至少 1 天）</span>
+                <span className="text-xs text-muted">{detectedRest.mandatory.size} 天</span>
               </div>
               {detectedRest.mandatory.size === 0 ? (
-                <p className="text-xs text-gray-400">未偵測到密集出勤，未強制標記例假日</p>
+                <p className="text-xs text-muted">未偵測到密集出勤，未強制標記例假日</p>
               ) : (
                 <div className="flex flex-wrap gap-1">
                   {Array.from(detectedRest.mandatory).sort().map((d) => {
@@ -849,7 +862,7 @@ export default function CheckPage() {
                     const dayLbl = ["日", "一", "二", "三", "四", "五", "六"][jsDay];
                     const holiday = TAIWAN_HOLIDAYS[d];
                     return (
-                      <span key={d} className={`text-xs px-2 py-0.5 rounded ${holiday ? "bg-red-100 text-red-700" : "bg-teal-50 text-teal-700"}`}>
+                      <span key={d} className={`text-xs px-2 py-0.5 rounded ${holiday ? "bg-danger-soft text-danger-deep" : "bg-navy-50 text-navy-600"}`}>
                         {d.slice(5).replace("-", "/")}（週{dayLbl}{holiday ? `・${holiday}` : ""}）
                       </span>
                     );
@@ -857,20 +870,20 @@ export default function CheckPage() {
                 </div>
               )}
             </div>
-            <div className="py-2 border-b">
+            <div className="py-2 border-b border-line">
               <div className="flex justify-between mb-1">
-                <span>系統判定休息日</span>
-                <span className="text-xs text-gray-400">{detectedRest.regular.size} 天</span>
+                <span className="text-muted">系統判定休息日</span>
+                <span className="text-xs text-muted">{detectedRest.regular.size} 天</span>
               </div>
               {detectedRest.regular.size === 0 ? (
-                <p className="text-xs text-gray-400">所選範圍內無 5 天工作 + 2 天休息的視窗</p>
+                <p className="text-xs text-muted">所選範圍內無 5 天工作 + 2 天休息的視窗</p>
               ) : (
                 <div className="flex flex-wrap gap-1">
                   {Array.from(detectedRest.regular).sort().map((d) => {
                     const jsDay = parseLocalDate(d).getDay();
                     const dayLbl = ["日", "一", "二", "三", "四", "五", "六"][jsDay];
                     return (
-                      <span key={d} className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                      <span key={d} className="text-xs px-2 py-0.5 rounded bg-canvas text-ink">
                         {d.slice(5).replace("-", "/")}（週{dayLbl}）
                       </span>
                     );
@@ -881,9 +894,9 @@ export default function CheckPage() {
 
             {/* 約定休息日加班摘要 */}
             {agreedOtDates.size > 0 && (
-              <div className="py-2 border-b">
+              <div className="py-2 border-b border-line">
                 <div className="flex justify-between mb-1">
-                  <span>✓ 約定的休息日加班</span>
+                  <span className="text-muted">✓ 約定的休息日加班</span>
                   <span className="text-xs text-orange-600 font-medium">{agreedOtDates.size} 天</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -903,24 +916,21 @@ export default function CheckPage() {
               </div>
             )}
           </div>
-          <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-muted bg-canvas rounded-lg p-3">
             勞基法第 36 條規定每 7 天至少 1 天例假 + 1 天休息日，未強制週幾。系統用 7 天滾動視窗逐日判定：連續 6 天工作的視窗，僅剩的休假日必為例假日。
-            <span className="text-red-600 font-medium"> 紅色標籤</span>表示該例假日與國定假日重疊（應安排補假）。
+            <span className="text-danger font-medium"> 紅色標籤</span>表示該例假日與國定假日重疊（應安排補假）。
             <span className="text-orange-600 font-medium"> 橘色標籤</span>表示與雇主約定的合法休息日加班。
           </p>
           <DisclaimerBanner />
           <div className="flex gap-3">
-            <button onClick={() => setStep(1)} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">
+            <button onClick={() => setStep(1)} className="flex-1 py-3 border border-line rounded-xl text-sm font-medium text-muted hover:bg-canvas">
               上一步
             </button>
             <button onClick={handleSubmit} disabled={loading}
-              className="flex-1 bg-teal-700 text-white py-3 rounded-xl font-semibold hover:bg-teal-800 disabled:opacity-50 transition-colors">
+              className="flex-1 bg-gradient-to-b from-navy-600 to-navy-800 text-white py-3 rounded-xl font-bold hover:brightness-110 disabled:opacity-50 transition-colors">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+                  <Loader2 size={16} className="animate-spin" />
                   分析中...
                 </span>
               ) : "算算我少拿多少"}

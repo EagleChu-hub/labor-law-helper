@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  Coins, AlertTriangle, Clock, TrendingUp, CalendarDays, Gauge,
+  Calculator, MessageCircle, ChevronRight, Loader2,
+} from "lucide-react";
 import { RiskBadge } from "@/components/shared/RiskBadge";
 import { ViolationCard } from "@/components/results/ViolationCard";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
@@ -91,32 +95,33 @@ function OvertimeCalculator() {
     <details
       open={open}
       onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-      className="bg-white border rounded-xl p-4"
+      className="bg-card border border-line rounded-2xl shadow-sm p-4"
     >
-      <summary className="cursor-pointer font-semibold text-gray-700 select-none">
-        🧮 加班費試算機（即時調整、不送出）
+      <summary className="flex items-center gap-2 cursor-pointer font-bold text-ink select-none">
+        <Calculator size={17} strokeWidth={1.9} className="text-navy" />
+        加班費試算機（即時調整、不送出）
       </summary>
       <div className="mt-3 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-gray-500">平日時薪 NT$</label>
+            <label className="text-xs text-muted">平日時薪 NT$</label>
             <input
               type="number" min={0} value={hourly}
               onChange={(e) => setHourly(e.target.value)}
-              className="w-full mt-1 border rounded-lg px-3 py-2 text-sm"
+              className="w-full mt-1 border border-line rounded-lg px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500">該班工時（小時）</label>
+            <label className="text-xs text-muted">該班工時（小時）</label>
             <input
               type="number" min={0} step={0.5} value={hours}
               onChange={(e) => setHours(e.target.value)}
-              className="w-full mt-1 border rounded-lg px-3 py-2 text-sm"
+              className="w-full mt-1 border border-line rounded-lg px-3 py-2 text-sm"
             />
           </div>
         </div>
         <div>
-          <label className="text-xs text-gray-500">情境</label>
+          <label className="text-xs text-muted">情境</label>
           <div className="grid grid-cols-2 gap-2 mt-1">
             {([
               { v: "weekday_ot", label: "平日加班（8h 後）" },
@@ -128,19 +133,19 @@ function OvertimeCalculator() {
                 key={v}
                 type="button"
                 onClick={() => setMode(v)}
-                className={`text-xs py-2 px-2 rounded-lg border ${mode === v ? "bg-teal-700 text-white border-teal-700" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+                className={`text-xs py-2 px-2 rounded-lg border font-medium ${mode === v ? "bg-navy text-white border-navy" : "bg-card border-line text-ink hover:bg-navy-50"}`}
               >
                 {label}
               </button>
             ))}
           </div>
         </div>
-        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4">
-          <p className="text-xs text-teal-700">應給金額</p>
-          <p className="text-2xl font-bold text-teal-800">{formatNtd(total)}</p>
-          <p className="text-xs text-teal-700 mt-1">{breakdown}</p>
+        <div className="bg-gold-soft border border-gold-border rounded-xl p-4">
+          <p className="text-xs text-gold-deep font-semibold">應給金額</p>
+          <p className="text-2xl font-bold text-gold-deep font-sora">{formatNtd(total)}</p>
+          <p className="text-xs text-gold-deep mt-1">{breakdown}</p>
         </div>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted">
           試算為參考數值，實際金額以勞動契約與雇主計算為準。若雇主已給付部分加班費，請以本金額扣除。
         </p>
       </div>
@@ -181,7 +186,7 @@ export default function CheckResultPage() {
   if (!result) return (
     <div className="py-12 space-y-4">
       {coldStartMsg && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 flex items-start gap-3">
+        <div className="bg-warn-soft border border-warn-border rounded-lg p-4 text-sm text-amber-800 flex items-start gap-3">
           <span className="text-xl leading-none">⏳</span>
           <div>
             <p className="font-semibold">後端正在喚醒中</p>
@@ -200,24 +205,29 @@ export default function CheckResultPage() {
   const hasWage = !!result.has_wage_input;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-5">
       {/* ⭐ 最顯眼：少領金額紅卡 */}
       {violationCount > 0 && (
         hasWage && totalShortfall > 0 ? (
-          <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-2xl shadow-lg p-6 space-y-2">
-            <p className="text-sm font-medium text-red-100">你這段期間可能少領</p>
-            <p className="text-4xl sm:text-5xl font-bold tracking-tight">{formatNtd(totalShortfall)}</p>
-            <p className="text-xs text-red-100">
+          <div className="relative overflow-hidden bg-gradient-to-br from-danger-deep to-danger text-white rounded-[20px] shadow-[0_20px_44px_-24px_rgba(168,58,54,.5)] p-7 space-y-1.5">
+            <Coins size={60} strokeWidth={1.4} className="absolute right-6 top-6 opacity-[0.28]" />
+            <p className="relative text-[15px] font-semibold text-white/86">你這段期間可能少領</p>
+            <p className="relative font-sora font-bold text-4xl sm:text-5xl leading-tight tracking-tight">
+              <span className="text-gold text-xl sm:text-2xl font-semibold align-middle mr-1.5">NT$</span>
+              {Math.round(totalShortfall).toLocaleString()}
+            </p>
+            <p className="relative text-[13.5px] text-white/80 leading-relaxed max-w-md pt-1">
               依勞基法第 24、39 條倍率試算。點下方違規卡片看每項明細，或捲到最底用試算機自己調參數重算。
             </p>
           </div>
         ) : (
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 space-y-2">
-            <p className="text-sm font-bold text-amber-900">
-              ⚠️ 這段期間有 {violationCount} 個班可能涉及加班費或假日工資未付足
+          <div className="bg-warn-soft border-2 border-warn-border rounded-2xl p-5 space-y-2">
+            <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+              <AlertTriangle size={16} strokeWidth={2} />
+              這段期間有 {violationCount} 個班可能涉及加班費或假日工資未付足
             </p>
             <p className="text-xs text-amber-800">
-              想看具體金額？回上一步在「💰 時薪資訊」填入平日時薪，系統會幫你算出可能短少多少 NT$。
+              想看具體金額？回上一步在「時薪資訊」填入平日時薪，系統會幫你算出可能短少多少 NT$。
             </p>
             <Link href="/check" className="inline-block mt-1 text-xs text-amber-900 underline font-medium">
               ← 回上一步補時薪
@@ -227,36 +237,40 @@ export default function CheckResultPage() {
       )}
 
       {/* Summary */}
-      <div className="bg-white rounded-xl border shadow-sm p-6 space-y-3">
+      <div className="bg-card rounded-2xl border border-line shadow-sm p-6 space-y-3">
         <div className="flex items-center gap-3">
           <RiskBadge level={result.risk_level} />
           {violationCount > 0 && (
-            <span className="text-sm text-gray-500">發現 {violationCount} 項疑似問題</span>
+            <span className="text-sm text-muted">發現 {violationCount} 項疑似問題</span>
           )}
         </div>
-        <h1 className="text-lg font-bold text-gray-800">{result.headline}</h1>
-        <p className="text-xs text-gray-500">{result.disclaimer}</p>
-      </div>
+        <h1 className="text-[19px] font-black leading-snug text-ink">{result.headline}</h1>
+        <p className="text-[13px] text-muted">{result.disclaimer}</p>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "總工時", value: `${minutesToHours(result.metrics.total_work_minutes)} 小時` },
-          { label: "加班時數", value: `${minutesToHours(result.metrics.total_overtime_minutes)} 小時` },
-          { label: "最長連班", value: `${result.metrics.max_consecutive_days} 天` },
-          { label: "日均工時", value: `${minutesToHours(result.metrics.avg_daily_minutes)} 小時` },
-        ].map((m) => (
-          <div key={m.label} className="bg-white rounded-lg border p-3 text-center">
-            <div className="text-lg font-bold text-teal-700">{m.value}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{m.label}</div>
-          </div>
-        ))}
+        {/* Metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+          {[
+            { label: "總工時", value: minutesToHours(result.metrics.total_work_minutes), Icon: Clock, gold: false },
+            { label: "加班時數", value: minutesToHours(result.metrics.total_overtime_minutes), Icon: TrendingUp, gold: false },
+            { label: "最長連班", value: `${result.metrics.max_consecutive_days} 天`, Icon: CalendarDays, gold: true },
+            { label: "日均工時", value: minutesToHours(result.metrics.avg_daily_minutes), Icon: Gauge, gold: false },
+          ].map((m) => (
+            <div
+              key={m.label}
+              className={`rounded-[14px] border p-4 text-center ${m.gold ? "bg-gold-soft border-gold-border" : "bg-navy-50 border-navy-100"}`}
+            >
+              <m.Icon size={19} strokeWidth={1.8} className={`mx-auto mb-2 ${m.gold ? "text-gold-deep" : "text-navy"}`} />
+              <div className={`font-sora font-bold text-[22px] ${m.gold ? "text-gold-deep" : "text-navy-900"}`}>{m.value}</div>
+              <div className="text-xs text-muted mt-0.5">{m.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Violations */}
       {result.violations.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-semibold text-gray-700">詳細分析</h2>
+          <h2 className="font-black text-ink text-lg">詳細分析</h2>
           {result.violations.map((v) => (
             <ViolationCard key={v.rule_id} violation={v} />
           ))}
@@ -265,11 +279,11 @@ export default function CheckResultPage() {
 
       {/* Next actions */}
       {result.next_actions.length > 0 && (
-        <section className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-          <h2 className="font-semibold text-blue-800">建議下一步</h2>
+        <section className="bg-navy-50 border border-navy-100 rounded-2xl p-4 space-y-2">
+          <h2 className="font-bold text-navy-900">建議下一步</h2>
           <ul className="space-y-1">
             {result.next_actions.map((action, i) => (
-              <li key={i} className="text-sm text-blue-700 flex items-start gap-2">
+              <li key={i} className="text-sm text-navy-700 flex items-start gap-2">
                 <span className="mt-0.5">•</span>
                 {action}
               </li>
@@ -280,15 +294,15 @@ export default function CheckResultPage() {
 
       {/* Complaint links — shown only when violations exist */}
       {violationCount > 0 && (
-        <section className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
-          <h2 className="font-semibold text-red-800">向主管機關申訴</h2>
-          <p className="text-sm text-red-700">若您確認雇主違法，可透過以下管道正式申訴：</p>
+        <section className="bg-danger-soft border border-danger-border rounded-2xl p-4 space-y-3">
+          <h2 className="font-bold text-danger-deep">向主管機關申訴</h2>
+          <p className="text-sm text-danger-deep">若您確認雇主違法，可透過以下管道正式申訴：</p>
           <div className="flex flex-col sm:flex-row gap-2">
             <a
               href="https://ap.bola.gov.taipei/LZ.aspx"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 py-2.5 px-4 bg-red-600 text-white rounded-lg text-sm font-medium text-center hover:bg-red-700"
+              className="flex-1 py-2.5 px-4 bg-danger text-white rounded-lg text-sm font-medium text-center hover:brightness-95"
             >
               台北市政府勞動局申訴
             </a>
@@ -296,12 +310,12 @@ export default function CheckResultPage() {
               href="https://romeodex.osha.gov.tw/PO/WriteMail"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 py-2.5 px-4 border border-red-600 text-red-700 rounded-lg text-sm font-medium text-center hover:bg-red-50"
+              className="flex-1 py-2.5 px-4 border border-danger text-danger-deep rounded-lg text-sm font-medium text-center hover:bg-white"
             >
               勞動部申訴信箱
             </a>
           </div>
-          <p className="text-xs text-gray-500">或撥打勞工諮詢專線：<strong>1955</strong></p>
+          <p className="text-xs text-muted">或撥打勞工諮詢專線：<strong>1955</strong></p>
         </section>
       )}
 
@@ -310,7 +324,28 @@ export default function CheckResultPage() {
 
       <DisclaimerBanner />
 
-      {/* AI 進一步詢問：依模式切換 */}
+      {/* AI CTA strip */}
+      <div className="flex items-center justify-between gap-4 flex-wrap bg-navy-50 border border-navy-100 rounded-2xl px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="w-11 h-11 rounded-[13px] bg-gradient-to-br from-navy-600 to-navy-900 flex items-center justify-center text-white shrink-0">
+            <MessageCircle size={22} strokeWidth={1.75} />
+          </span>
+          <div>
+            <div className="text-[15px] font-black text-ink">想更完整的分析？</div>
+            <div className="text-[13px] text-muted mt-0.5">讓 AI 律師用白話文，逐條告訴你可以主張什麼 💬</div>
+          </div>
+        </div>
+        {IS_OPENSOURCE ? null : (
+          <Link
+            href={buildAskUrl(result)}
+            className="inline-flex items-center gap-2 bg-gradient-to-b from-gold to-gold-deep text-white font-bold text-sm rounded-xl px-5 py-3 hover:brightness-110 transition"
+          >
+            問 AI 律師 <ChevronRight size={16} />
+          </Link>
+        )}
+      </div>
+
+      {/* AI 進一步詢問：開源版走複製提示詞流程 */}
       {IS_OPENSOURCE ? (
         <OpenSourceAiButtons
           prompt={buildResultPrompt(result)}
@@ -321,18 +356,10 @@ export default function CheckResultPage() {
       <div className="flex gap-3">
         <Link
           href="/check"
-          className="flex-1 py-3 text-center border border-gray-300 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+          className="flex-1 py-3 text-center border border-line rounded-xl text-sm font-medium text-muted hover:bg-card"
         >
           重新輸入
         </Link>
-        {!IS_OPENSOURCE && (
-          <Link
-            href={buildAskUrl(result)}
-            className="flex-1 py-3 text-center bg-teal-700 text-white rounded-xl font-semibold hover:bg-teal-800"
-          >
-            進一步詢問 AI
-          </Link>
-        )}
       </div>
     </div>
   );

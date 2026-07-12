@@ -1,6 +1,6 @@
 # 勞基法查詢小幫手 — 開發進度紀錄
 
-> 最後更新：2026-07-12（含 PR11）
+> 最後更新：2026-07-12（含 PR13）
 
 ---
 
@@ -279,6 +279,66 @@
 
 ---
 
+### PR12 — BM25 口語同義詞擴充 + Render OOM 崩潰修復 ✅
+
+**動機**：PR11 上線後兩個獨立問題浮現：(1) 勞工用口語描述霸凌（排擠、冷凍、欺負）時 BM25 查不到新法條文；(2) Render 後端在推送 PR11/12 commit 後開始對所有真實端點回傳 `503 hibernate-wake-error`，僅 `/docs` 與 CORS preflight 正常。
+
+#### 12-1 BM25 口語同義詞擴充
+
+**問題**：雲端（Render）沒有 ChromaDB，只能靠 BM25 逐字比對；「排擠」「冷凍」「欺負」等勞工口語與法條用詞（孤立、冷落、侮辱）不同字，實測 6 個口語問法中 0~1/5 命中霸凌相關 chunk。
+
+**修法**（`backend/domain/retriever/hybrid_retriever.py`）：
+- `_SYNONYMS` 新增 11 組口語→法律用語對照（霸凌、排擠、孤立、冷凍、羞辱、辱罵、欺負、穿小鞋、精神暴力、言語暴力、罵我）
+- `_expand_query()` 改為累加所有命中的同義詞（去重保序），原本只取第一個命中就 return，多個口語詞同時出現時會漏掉其餘擴充詞
+- 驗證：6 個口語測試問法全部從 0~1/5 提升到 5/5，且職安法 22-1 排名第一；不相關查詢（加班費怎麼算）不受影響
+
+#### 12-2 Render OOM 崩潰迴圈修復（生產事故）
+
+**症狀**：使用者提供的 Render 部署 log 顯示每隔數分鐘就有一次無 `==> Deploying...` 前綴、無 Python traceback 的靜默 `Running 'uvicorn main:app...'` 重啟；期間所有真實端點請求（`/api/v1/law/search`、`/api/v1/check/analyze`、`/api/v1/ask/chat`）持續逾時或 502/503，從未有一次成功回應被記錄——典型 SIGKILL OOM 特徵（免費方案 512MB 記憶體上限）。
+
+**根因**：`backend/domain/retriever/vector_retriever.py` 的 `vector_search()` 呼叫順序錯誤——先呼叫 `_get_embed_model()`（載入 SentenceTransformer + torch，約 200-400MB）才呼叫 `_get_collection()`。但 Render 雲端**從未有** `chroma_db/`（`.gitignore` 排除，僅本機開發環境存在），`_get_collection()` 必定失敗，等於雲端每次向量搜尋都白白吃掉 200-400MB 記憶體後才 fallback，最終把 512MB 額度榨乾觸發 OOM。
+
+**修法**：
+- 對調檢查順序：先呼叫 `_get_collection()`，失敗就直接短路回傳 `[]`，完全不會走到 `_get_embed_model()`
+- `sentence_transformers` 的 import 移進 `_get_embed_model()` 函數內（真正的延遲載入），雲端環境完全不會 `import torch`
+
+**驗證**：
+- 本機模擬雲端（`CHROMA_PATH` 指向不存在路徑）：確認 `'torch' not in sys.modules`，0.3 秒短路，回傳空陣列
+- 本機真實環境（有 `chroma_db`）：正常回傳 5 筆結果，含職安法 22-1 條（score 0.723）
+- 推送後（commit `bb94593`）連續 6 次打 `/api/v1/law/search?q=霸凌`，全數 200 OK，0-1 秒內回應（先前為多分鐘逾時）
+- 端對端真實 Gemini 呼叫（口語問法「被主管冷凍排擠、當眾羞辱」）：30.1 秒回應，正確引用職安法 22-1、防治準則、申訴辦法，並附帶一筆真實法院判決
+
+**關鍵學習**
+1. 雲端與本機環境差異大時，「先檢查便宜的前置條件、再載入昂貴資源」的順序不是效能優化而是生存必要——反過來寫在資源受限環境會直接導致崩潰迴圈
+2. Render 免費方案的 OOM 崩潰是 SIGKILL，Python 端完全無 traceback，只能從「無 Deploying 前綴的靜默重啟」+「從無成功請求記錄」這兩個 log 特徵反推，光看單次錯誤訊息看不出根因
+3. 背景輪詢 curl 重試在崩潰迴圈期間會全部超時，必須拿到完整部署 log 才能定位——單純狂 retry 打不出根因
+
+---
+
+### PR13 — 網頁美學重新設計（深藍 + 金色）✅
+
+**動機**：使用者請「Claude Design」（獨立設計 session）重新設計網頁美學，並提供了完整交接資料（`design-handoff/brief.md`）。設計稿完成後（`design-handoff/incoming/design_handoff_labor_law_redesign/`），依設計稿在既有 Next.js + Tailwind 架構下重新實作全站視覺，不動任何資訊架構、表單流程、判斷邏輯。
+
+**設計方向**（使用者於交接階段確認）
+- 整體氛圍：親切溫暖小幫手感（優化現況，非砍掉重練）
+- 圖示：混合式——Hero／CTA／警語保留 emoji（⚖️💬⚠️），系統性 UI 全面換成 Lucide icons
+- 主色：深藍（`#2c3c6b`）+ 金色（`#b8862f`，使用者於設計稿中確認的正式版金色，非預設 `#c69749`）
+
+**修改**
+- `frontend/tailwind.config.ts` + `frontend/app/globals.css`：新增設計 token（`navy`/`gold`/`danger`/`warn`/`ok`/`canvas`/`card`/`line`/`ink`/`muted`），全部透過 CSS variable 橋接（沿用專案既有 `var(--x)` 慣例）
+- `frontend/app/layout.tsx`：透過 `next/font/google` 載入 Noto Sans TC（400/500/700/900）+ Sora（500/600/700，數字/金額專用）
+- `package.json`：新增 `lucide-react`
+- 全站共用元件重做樣式（props/state 介面不變）：`AppShell`（新版導覽列+品牌識別 Scale icon）、`RiskBadge`、`DisclaimerBanner`、`ChatThread`、`ViolationCard`（金色試算框、色條、狀態徽章）、`OpenSourceAiButtons`、`ErrorState`、`LoadingSkeleton`
+- 5 個頁面全部重做視覺（首頁 Hero、`/check` 三步驟、`/check/result` 少領金額卡與詳細分析、`/ask` 聊天介面、`/law` 搜尋）——文案、欄位、計算邏輯逐行比對未變動
+
+**踩坑**
+- `next/font/google` 的 `Noto_Sans_TC` **不支援** `chinese-traditional` subset（build 直接失敗，錯誤訊息列出可用 subset 僅 `cyrillic`/`latin`/`latin-ext`/`vietnamese`）。next/font 對 CJK 字型只能子集化拉丁字元，中文字會 fallback 到系統字型——這是 next/font 已知限制，不是設定錯誤，改回 `subsets: ["latin"]` 即可正常 build。
+- 自訂 CSS variable 顏色（如 `var(--gold-deep)`）**不支援** Tailwind 的透明度修飾語法（`text-gold-deep/90`）——Tailwind 只能對「build time 已知的固定色值」套用透明度轉換，`var()` 是執行期才解析，語法上不會報錯但顏色不會套用透明度。全面改用不帶透明度修飾的實色 class。
+
+**驗證**：`npm run build` 通過（0 TypeScript 錯誤）；本機 `npm run dev` 逐頁點擊確認首頁／`/check` 三步驟／`/ask`／`/law` 皆正確渲染、無 console error。
+
+---
+
 ### PR10 — 真實法院判決引用 ✅
 
 **動機**：原本 RAG 語料只有法條文本，AI 回答只能引用條號。整合法律偵探 `tlr.dr-lawbot.com` 判決搜尋後，每次回答可附上真實法院案號與判決結果，大幅提升說服力。
@@ -384,7 +444,7 @@ POST /v1/search
 
 ---
 
-## 部署架構（PR11 後，已上線）
+## 部署架構（PR12 後，已上線）
 
 ```
 GitHub repo（同一份）
