@@ -16,14 +16,32 @@ _SYNONYMS: dict[str, str] = {
     "資遣費": "資遣 勞工退休",
     "退休金": "勞工退休金",
     "病假": "普通傷病假",
+    # 職場霸凌口語 → 職安法 22-1 法定用詞（冒犯、威脅、冷落、孤立、侮辱）
+    # 雲端只有 BM25（無向量搜尋），勞工口語與法條用詞不同字時查不到，必須靠此擴充
+    "霸凌": "職場霸凌",
+    "排擠": "職場霸凌 孤立 冷落",
+    "孤立": "職場霸凌 冷落",
+    "冷凍": "職場霸凌 冷落 孤立",
+    "羞辱": "職場霸凌 侮辱",
+    "辱罵": "職場霸凌 侮辱",
+    "欺負": "職場霸凌 侮辱 冒犯",
+    "穿小鞋": "職場霸凌 冷落",
+    "精神暴力": "職場霸凌",
+    "言語暴力": "職場霸凌 侮辱",
+    "罵我": "職場霸凌 侮辱",
 }
 
 
 def _expand_query(query: str) -> str:
+    """累加所有命中的同義詞（去重保序），而非只取第一個。"""
+    extras: list[str] = []
     for k, v in _SYNONYMS.items():
         if k in query:
-            return f"{query} {v}"
-    return query
+            extras.extend(v.split())
+    if not extras:
+        return query
+    deduped = " ".join(dict.fromkeys(extras))
+    return f"{query} {deduped}"
 
 
 def _rrf_score(rank: int, k: int = RRF_K) -> float:
