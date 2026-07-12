@@ -11,11 +11,32 @@ LAWS = [
         "name": "勞動基準法",
         "pcode": "N0030001",
         "doc_type": "statute",
+        "alias": "勞基法",
     },
     {
         "name": "勞動基準法施行細則",
         "pcode": "N0030002",
         "doc_type": "enforcement_rule",
+        "alias": "勞基法施行細則",
+    },
+    # 2026-07-01 職場霸凌防治新制（PR11）
+    {
+        "name": "職業安全衛生法",
+        "pcode": "N0060001",
+        "doc_type": "statute",
+        "alias": "職安法",
+    },
+    {
+        "name": "職場霸凌防治措施準則",
+        "pcode": "N0060085",
+        "doc_type": "enforcement_rule",
+        "alias": "職場霸凌防治措施準則",
+    },
+    {
+        "name": "地方主管機關受理最高負責人職場霸凌事件申訴處理辦法",
+        "pcode": "N0060086",
+        "doc_type": "enforcement_rule",
+        "alias": "地方主管機關受理最高負責人職場霸凌事件申訴處理辦法",
     },
 ]
 
@@ -67,7 +88,7 @@ class StatuteFetcher(BaseLegalFetcher):
                 doc_type=law["doc_type"],
                 article_no=article_label,
                 title=f"{law['name']}{article_label}",
-                text=f"勞基法{article_label}：{content}",
+                text=f"{law.get('alias', law['name'])}{article_label}：{content}",
                 source_url=source_url,
                 metadata={"law_name": law["name"], "pcode": law["pcode"], "flno": flno},
             )

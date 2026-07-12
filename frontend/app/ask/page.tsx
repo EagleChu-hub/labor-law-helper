@@ -17,6 +17,7 @@ const EXAMPLE_QUESTIONS = [
   "被要求假日出勤有加班費嗎？",
   "年假有幾天？什麼時候可以請？",
   "資遣費怎麼算？",
+  "主管長期當眾羞辱我、把我冷凍孤立，算職場霸凌嗎？",
 ];
 
 function AssistantAnswer({ answer }: { answer: AskResponse }) {
@@ -63,7 +64,7 @@ function AssistantAnswer({ answer }: { answer: AskResponse }) {
                   <span className="text-orange-800">{ref.title}</span>
                 </>
               ) : (
-                <span className="text-teal-700">勞基法 {ref.article_no}：{ref.title}</span>
+                <span className="text-teal-700">{ref.title}</span>
               )}
             </a>
           ))}

@@ -98,8 +98,7 @@ export default function LawPage() {
               >
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dt.color}`}>{dt.label}</span>
-                  <span className="font-semibold text-gray-800">勞基法 {r.article_no}</span>
-                  <span className="text-sm text-gray-500">{r.title}</span>
+                  <span className="font-semibold text-gray-800">{r.title}</span>
                 </div>
                 <p className="text-sm text-gray-600 line-clamp-3">{r.snippet}</p>
               </a>
