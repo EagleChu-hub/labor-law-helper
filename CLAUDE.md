@@ -1,5 +1,18 @@
 # CLAUDE.md
 
+> ★ **法律內容的作業紀律，另見兩個 skill**（`~/.claude/skills/`）：
+> `tw-labor-dispute`（勞資爭議的程序、法條、算式）與
+> `adversarial-docs`（有敵意讀者的文書紀律）。
+> 三條與本專案直接相關的：
+> ⛔ **引用法條寧可逐字抄，不要改寫**——「只抄一半」比「完全沒寫」危險，
+>    因為抄一半的看起來是完整的（PR14、PR15 各栽在這上面一次）。
+> ⛔ **查不到原文就不要引**，改列「待查證」。
+> ⛔ **含血噴人比證據不足更致命**——本專案的使用者是勞工，
+>    錯誤指控雇主違法（假陽性）比少報一項違規更傷人。
+>
+> ⚠️ 反向亦然：本專案的 `raw_chunks_cache.json` 是那兩個 skill **唯一的**法規
+> ground truth，skill 的 `scripts/verify_quotes.py` 會讀它。**動語料庫要想到這件事。**
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---

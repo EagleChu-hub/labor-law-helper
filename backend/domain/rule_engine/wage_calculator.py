@@ -80,13 +80,19 @@ def calc_shortfall_for_rule(
 
     if rule_id == "monthly_overtime":
         # 推估：總加班分鐘 ÷ 60 × 1.67（保守按高倍率）
+        # ⚠️ 門檻須與 labor_rules.rule_monthly_overtime 一致（2026-08 同步修正）：
+        #    32 條 2 項本文 46h，但書（經工會／勞資會議同意）為 54h。
+        #    46～54h 之間是否違法取決於有無該同意，規則端只給 warning，
+        #    ⛔ 故金額端亦不得逕行認列少領——寧可少估，不可對雇主含血噴人。
+        #    超過 54h 者，縱經同意亦逾但書上限，才計入。
+        from .labor_rules import _OT_LIMIT_AGREED
         total_ot = att.total_overtime_minutes
         for d in att.days:
             extra = max(0, d.work_minutes - 8 * 60)
             total_ot += extra
-        if total_ot > 46 * 60:
-            over = total_ot - 46 * 60
-            return round(over / 60 * h * 1.67), f"超過 46h 月加班上限部分 ×1.67 ×{h}/h"
+        if total_ot > _OT_LIMIT_AGREED:
+            over = total_ot - _OT_LIMIT_AGREED
+            return round(over / 60 * h * 1.67), f"超過 54h 月加班上限（32 條 2 項但書）部分 ×1.67 ×{h}/h"
         return 0, ""
 
     if rule_id == "unpaid_overtime":

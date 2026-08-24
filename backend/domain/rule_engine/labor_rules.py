@@ -41,6 +41,25 @@ def _ref_rule(article_no: str, title: str, snippet: str) -> dict:
     }
 
 
+# ⚠️ 32 條 2 項有「但書」：經工會（無工會者經勞資會議）同意後，
+#    月上限放寬為 54 小時、每三個月 138 小時（30 人以上者並應報主管機關備查）。
+#    ⛔ 2026-08 修正前本規則直接把 >46h 判為疑似違規，
+#       對已依但書取得同意之事業單位會產生「假陽性」——
+#       告訴勞工「你老闆違法」而其實未必。故改為三段式判斷。
+_OT_LIMIT_BASE = 46 * 60      # 32 條 2 項本文
+_OT_LIMIT_AGREED = 54 * 60    # 32 條 2 項但書（經工會／勞資會議同意）
+
+# 引用原文一律抄完整（含但書），不得只抄前半句
+_OT_SNIPPET = (
+    "前項雇主延長勞工之工作時間連同正常工作時間，一日不得超過十二小時；"
+    "延長之工作時間，一個月不得超過四十六小時，但雇主經工會同意，"
+    "如事業單位無工會者，經勞資會議同意後，延長之工作時間，"
+    "一個月不得超過五十四小時，每三個月不得超過一百三十八小時。"
+)
+_OT_ASK_AGREED = "雇主是否已經工會或勞資會議同意（30 人以上並報主管機關備查）？若有，月上限為 54 小時。"
+_OT_ASK_QUARTER = "每三個月合計是否超過 138 小時？（需三個月完整資料才能判斷）"
+
+
 # ──────────────────────────────────────────────
 # 規則 1：單日工時 > 12 小時 → 第 32 條
 # ──────────────────────────────────────────────
@@ -54,7 +73,7 @@ def rule_daily_hours(att: ParsedAttendance) -> ViolationResult:
             title="單日工時",
             explanation="單日工時未超過 12 小時上限。",
             confidence="high",
-            law_references=[_ref("32", "延長工時限制", "雇主延長勞工工作時間，每日不得超過4小時。")],
+            law_references=[_ref("32", "延長工時限制（32 條 2 項）", _OT_SNIPPET)],
             missing_facts=[],
         )
     worst = max(violations, key=lambda d: d.total_minutes)
@@ -63,9 +82,12 @@ def rule_daily_hours(att: ParsedAttendance) -> ViolationResult:
         rule_id="daily_overtime",
         status="suspected_violation",
         title="單日工時超過 12 小時",
-        explanation=f"{worst.date.strftime('%m/%d')} 工時達 {hrs:.1f} 小時，超過勞基法第 32 條「每日延長工時不得超過 4 小時」（正常 8 + 延長 4 = 12 小時上限）。",
+        explanation=(
+            f"{worst.date.strftime('%m/%d')} 工時達 {hrs:.1f} 小時，超過勞基法第 32 條第 2 項"
+            "「延長勞工之工作時間**連同正常工作時間，一日不得超過十二小時**」之上限。"
+        ),
         confidence="high" if len(violations) > 1 else "medium",
-        law_references=[_ref("32", "延長工時限制", "雇主延長勞工工作時間，每日不得超過4小時。")],
+        law_references=[_ref("32", "延長工時限制（32 條 2 項）", _OT_SNIPPET)],
         missing_facts=["是否屬緊急事故或特殊行業（如醫療、運輸）？", "是否有工會或勞資會議書面同意？"],
     )
 
@@ -237,45 +259,66 @@ def rule_saturday_pay(att: ParsedAttendance) -> ViolationResult:
 # 規則 6：月延長工時 > 46 小時 → 第 32 條第 2 項
 # ──────────────────────────────────────────────
 def rule_monthly_overtime(att: ParsedAttendance) -> ViolationResult:
-    LIMIT = 46 * 60
     total_ot = att.total_overtime_minutes
     days_count = len(att.days)
     if days_count < 20:
         projected = int(total_ot * (30 / max(days_count, 1)))
-        if projected <= LIMIT:
-            return ViolationResult(
-                rule_id="monthly_overtime",
-                status="compliant",
-                title="月加班時數",
-                explanation=f"依現有資料（{days_count} 天）推估月加班時數未超過 46 小時。",
-                confidence="low",
-                law_references=[_ref("32", "月延長工時上限", "每月延長工時不得超過四十六小時。")],
-                missing_facts=["需完整一個月資料才能精確判斷"],
-            )
         conf = "low"
     else:
         projected = total_ot
         conf = "high"
+    hrs = projected // 60
+    ref = [_ref("32", "月延長工時上限（含但書）", _OT_SNIPPET)]
+    partial = ["需完整一個月資料才能精確判斷"] if days_count < 20 else []
 
-    if projected <= LIMIT:
+    # ① 未達 46 小時：合規
+    if projected <= _OT_LIMIT_BASE:
         return ViolationResult(
             rule_id="monthly_overtime",
             status="compliant",
             title="月加班時數",
-            explanation=f"月加班時數約 {projected // 60} 小時，未超過 46 小時上限。",
+            explanation=(
+                f"依現有資料（{days_count} 天）推估月加班時數約 {hrs} 小時，"
+                "未超過勞基法第 32 條第 2 項本文之 46 小時上限。"
+            ),
             confidence=conf,
-            law_references=[_ref("32", "月延長工時上限", "每月延長工時不得超過四十六小時。")],
-            missing_facts=[],
+            law_references=ref,
+            missing_facts=partial,
         )
-    hrs = projected // 60
+
+    # ② 46～54 小時之間：⚠️ 只有「未取得同意」才違法 → 不逕判違規，改為提醒
+    if projected <= _OT_LIMIT_AGREED:
+        return ViolationResult(
+            rule_id="monthly_overtime",
+            status="warning",
+            title=f"月加班時數約 {hrs} 小時，已超過 46 小時（是否違法取決於有無工會／勞資會議同意）",
+            explanation=(
+                f"依出勤紀錄推估月加班時數約 {hrs} 小時，已超過勞基法第 32 條第 2 項"
+                "本文之 46 小時上限。**惟同項但書規定**，雇主經工會同意（無工會者經勞資會議同意）後，"
+                "月上限為 54 小時、每三個月 138 小時；僱用 30 人以上者並應報當地主管機關備查。"
+                "因此本項是否違法，取決於雇主有無取得該同意並依規定報備——建議先向雇主或工會確認。"
+            ),
+            confidence=conf,
+            law_references=ref,
+            missing_facts=partial + [_OT_ASK_AGREED, _OT_ASK_QUARTER],
+        )
+
+    # ③ 超過 54 小時：縱經同意亦逾但書上限
     return ViolationResult(
         rule_id="monthly_overtime",
         status="suspected_violation",
-        title=f"月加班時數超過 46 小時（約 {hrs} 小時）",
-        explanation=f"依出勤紀錄推估月加班時數約 {hrs} 小時，超過勞基法第 32 條第 2 項每月 46 小時上限。",
+        title=f"月加班時數超過 54 小時（約 {hrs} 小時）",
+        explanation=(
+            f"依出勤紀錄推估月加班時數約 {hrs} 小時，"
+            "**縱使雇主已經工會或勞資會議同意，仍超過勞基法第 32 條第 2 項但書之 54 小時上限**。"
+            "（未取得該同意者，本文上限為 46 小時，超過更多。）"
+        ),
         confidence=conf,
-        law_references=[_ref("32", "月延長工時上限", "每月延長工時不得超過四十六小時。")],
-        missing_facts=["是否屬天災、事變等緊急情況（上限可放寬）？"],
+        law_references=ref,
+        missing_facts=partial + [
+            "是否屬天災、事變或突發事件（第 32 條第 4 項，該情形不受前項上限限制）？",
+            _OT_ASK_QUARTER,
+        ],
     )
 
 
@@ -313,39 +356,80 @@ def rule_unpaid_overtime(att: ParsedAttendance) -> ViolationResult:
 
 
 # ──────────────────────────────────────────────
-# 規則 8：兩班次間休息不足 11 小時（輪班制）→ 施行細則第 34 條
+# 規則 8：兩班次間休息不足 11 小時（輪班制）→ 勞基法第 34 條第 2 項
 # ──────────────────────────────────────────────
+# ⛔ 2026-08 修正：原本引用「施行細則第 34 條」——**引錯法規**。
+#    該規定在**勞動基準法第 34 條第 2 項**，施行細則並無此條，
+#    產生給使用者的 source_url 會指向錯誤的法規。
+# ⚠️ 同時該項亦有但書：經中央目的事業主管機關商請中央主管機關公告者，
+#    得變更休息時間為**不少於連續八小時**（並須經工會／勞資會議同意，
+#    30 人以上並應報備）。故與 32 條同理，改為三段式，不逕判違規。
+_REST_LIMIT_BASE = 11 * 60    # 34 條 2 項本文
+_REST_LIMIT_MIN = 8 * 60      # 34 條 2 項但書之下限
+
+_REST_SNIPPET = (
+    "依前項更換班次時，至少應有連續十一小時之休息時間。"
+    "但因工作特性或特殊原因，經中央目的事業主管機關商請中央主管機關公告者，"
+    "得變更休息時間不少於連續八小時。"
+)
+_REST_ASK = [
+    "是否屬輪班制勞工？（非輪班制不適用本條）",
+    "雇主所屬行業是否經中央主管機關公告得縮短為連續八小時？若有，並須經工會或勞資會議同意（30 人以上應報備）。",
+]
+
+
 def rule_min_rest_hours(att: ParsedAttendance) -> ViolationResult:
-    LIMIT = 11 * 60
-    violations = [
+    ref = [_ref("34", "輪班換班休息時間（34 條 2 項，含但書）", _REST_SNIPPET)]
+    shortfalls = [
         d for d in att.days
-        if d.rest_minutes_before > 0 and d.rest_minutes_before < LIMIT
+        if d.rest_minutes_before > 0 and d.rest_minutes_before < _REST_LIMIT_BASE
     ]
-    if not violations:
+    if not shortfalls:
         return ViolationResult(
             rule_id="min_rest_hours",
             status="compliant",
             title="班次間休息時間",
             explanation="連續工作日間的休息時間均達 11 小時以上。",
             confidence="medium",
-            law_references=[_ref_rule("34", "輪班休息時間", "更換班次時，至少應有連續十一小時之休息時間。")],
+            law_references=ref,
             missing_facts=[],
         )
-    worst = min(violations, key=lambda d: d.rest_minutes_before)
+    worst = min(shortfalls, key=lambda d: d.rest_minutes_before)
     rest_hrs = worst.rest_minutes_before / 60
-    dates_str = ", ".join(d.date.strftime("%m/%d") for d in violations)
+    dates_str = ", ".join(d.date.strftime("%m/%d") for d in shortfalls)
+    below_min = [d for d in shortfalls if d.rest_minutes_before < _REST_LIMIT_MIN]
+
+    # ① 8～11 小時：可能落在但書範圍 → 提醒，不逕判違規
+    if not below_min:
+        return ViolationResult(
+            rule_id="min_rest_hours",
+            status="warning",
+            title=f"班次間休息不足 11 小時（{len(shortfalls)} 次，最短 {rest_hrs:.1f} 小時）",
+            explanation=(
+                f"以下日期上班前休息時間不足 11 小時：{dates_str}。"
+                "依勞動基準法第 34 條第 2 項本文，輪班制勞工更換班次時應有連續 11 小時休息；"
+                "**惟同項但書規定**，經中央目的事業主管機關商請中央主管機關公告之行業，"
+                "得縮短為不少於連續 8 小時（並須經工會或勞資會議同意）。"
+                "因所餘時間仍達 8 小時以上，是否違法取決於雇主是否屬該公告行業並已取得同意。"
+            ),
+            confidence="medium",
+            law_references=ref,
+            missing_facts=_REST_ASK,
+        )
+
+    # ② 低於 8 小時：縱依但書亦不足
     return ViolationResult(
         rule_id="min_rest_hours",
         status="suspected_violation",
-        title=f"班次間休息不足 11 小時（{len(violations)} 次）",
+        title=f"班次間休息不足 8 小時（{len(below_min)} 次，最短 {rest_hrs:.1f} 小時）",
         explanation=(
-            f"以下日期上班前休息時間不足 11 小時：{dates_str}。"
-            f"最短僅 {rest_hrs:.1f} 小時。"
-            f"依勞動基準法施行細則第 34 條，輪班制勞工更換班次時應有連續 11 小時休息。"
+            f"以下日期上班前休息時間不足 11 小時：{dates_str}，最短僅 {rest_hrs:.1f} 小時。"
+            "**縱使雇主屬經公告得適用但書之行業，仍低於勞動基準法第 34 條第 2 項但書"
+            "所定「不少於連續八小時」之下限。**"
         ),
-        confidence="high" if len(violations) > 1 else "medium",
-        law_references=[_ref_rule("34", "輪班休息時間", "更換班次時，至少應有連續十一小時之休息時間。")],
-        missing_facts=["是否屬輪班制勞工？（非輪班制不適用本條）", "雇主是否已取得勞工書面同意？"],
+        confidence="high" if len(below_min) > 1 else "medium",
+        law_references=ref,
+        missing_facts=_REST_ASK[:1],
     )
 
 
@@ -373,12 +457,12 @@ def rule_national_holiday(att: ParsedAttendance) -> ViolationResult:
             title="國定假日",
             explanation="出勤紀錄中無國定假日出勤或例假日與國定假日重疊的情況。",
             confidence="medium",
-            law_references=[_ref("37", "國定假日", "勞工於紀念日、勞動節日及其他中央主管機關規定應放假之日，均應休假。")],
+            law_references=[_ref("37", "國定假日", "內政部所定應放假之紀念日、節日、勞動節及其他中央主管機關指定應放假日，均應休假。")],
             missing_facts=[],
         )
 
     issues = []
-    refs = [_ref("37", "國定假日休假", "勞工於紀念日、勞動節日...均應休假。")]
+    refs = [_ref("37", "國定假日休假", "內政部所定應放假之紀念日、節日、勞動節及其他中央主管機關指定應放假日，均應休假。")]
 
     if worked_on_holiday:
         detail_parts = []
