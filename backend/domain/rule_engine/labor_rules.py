@@ -109,7 +109,7 @@ def rule_weekly_hours(att: ParsedAttendance) -> ViolationResult:
             title="單週正常工時",
             explanation="各週正常工時均未超過 40 小時。",
             confidence="high",
-            law_references=[_ref("30", "正常工時", "勞工每週工作時間不得超過四十小時。")],
+            law_references=[_ref("30", "正常工時", "勞工正常工作時間，每日不得超過八小時，每週不得超過四十小時。")],
             missing_facts=[],
         )
     worst_hrs = max(over_weeks) / 60
@@ -119,7 +119,7 @@ def rule_weekly_hours(att: ParsedAttendance) -> ViolationResult:
         title="單週工時超過 40 小時",
         explanation=f"最高週工時達 {worst_hrs:.1f} 小時，超過勞基法第 30 條規定的每週 40 小時上限。",
         confidence="high" if len(att.weeks) >= 2 else "medium",
-        law_references=[_ref("30", "正常工時", "勞工每週工作時間不得超過四十小時。")],
+        law_references=[_ref("30", "正常工時", "勞工正常工作時間，每日不得超過八小時，每週不得超過四十小時。")],
         missing_facts=["是否有採用彈性工時制度（每 8 週平均不超過 40 小時）？"],
     )
 
