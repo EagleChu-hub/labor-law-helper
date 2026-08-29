@@ -533,6 +533,80 @@ POST /v1/search
 
 ---
 
+### PR16 — 分流導引頁 `/triage`：給「還不知道自己要幹嘛」的人 ✅
+
+**動機**
+
+現有三條功能線（出勤判斷／AI 問答／法條查詢）**都是給已經知道自己要什麼的人用的**。
+但去搜尋網路上勞工的實際抱怨（Dcard 工作板等）後發現，擋住最多人的不是法律見解，而是
+「我不敢」「我不知道申訴跟調解差在哪」「聽說勞工局沒用」。
+
+⛔ **設計前提**：會被雇主坑的勞工，往往也是資訊能力較弱的一群——有辦法的人自己就找得到辦法。
+所以本頁的成功標準**不是「資訊完整」**，而是「一個很累、不太讀得動字的人，
+能在三分鐘內知道明天要做什麼，而且知道**要怎麼開口**」。
+
+★ 第一題刻意是「你想自己處理，還是想有人幫我」的分岔：
+1955 是免付費、24 小時、有印尼／越南／泰國／菲律賓語通譯，**本身就受理申訴並轉介**——
+線的另一頭有真人會做分流。但**由使用者自己選**，不預設他沒能力。
+
+**修改**
+
+- `frontend/lib/triageTree.ts`（新）— 內容與規則。⛔ **不是決策樹**：
+  核心論點是「公法（罰雇主）與私法（拿回錢）**可以並行**」，樹只能走到一個葉子，會逼出假葉子；
+  且「送件前先固定證據」對三條路線都成立，在樹裡會被複製多份然後各自漂移。
+  → 內容用資料，分流用 `deriveTriage` 的明確分支（可回話「因為你選了 X，所以 Y」）。
+  - `StatuteRef.verified` — false 者畫面標「待查證」，且**不得逐字進 AI 提示詞**
+  - `TriageAdvisory.kind: "legal" | "practice"` — ★ 載重欄位：
+    `practice` 時 `statutes` 必為空，讓「會露餡的情境」這種經驗談**在型別上就不可能掛法條**
+- `frontend/app/triage/page.tsx`、`app/triage/result/page.tsx`（新）
+- `frontend/components/triage/{OptionCard,ScriptCard}.tsx`（新）
+- `frontend/lib/promptTemplate.ts` — 拆成 `SYSTEM_ROLE` / `OUTPUT_FORMAT_CHECK` /
+  `OUTPUT_FORMAT_TRIAGE`；新增 `buildTriagePrompt()`
+- `AppShell.tsx` 導覽列加第 5 項、`app/page.tsx` 首頁加主入口卡
+- `backend/tools/check_frontend_statutes.py`（新）— 補上 PR15 列的缺口之一
+
+**⛔ 先修了三個法條錯誤才動手（都在 skill 的 `01-程序路線.md`，方向全部對勞工不利）**
+
+1. 「勞動事件法 12 條有暫免徵之規定」→ 實際是**暫免徵收裁判費三分之二**。
+   ★ 又是**只抄一半**——只抄「暫免徵」漏掉「三分之二」，等於承諾了一場免費官司。
+2. 行政調解被寫成「只有契約效力」→ 實際 **勞資爭議處理法 59 條**可聲請法院裁定強制執行、
+   暫免繳裁判費、法院應於七日內裁定。原寫法會**把勞工推離免費路線**。
+3. 訴訟被當成平行選項 → **勞動事件法 16 條**：起訴前應先經法院勞動調解。
+
+順手補上 **勞資爭議處理法 8 條**（調解期間資方不得為不利行為，與勞基法 74 條 2 項
+時點要件不同、可併用）與 **57 條**（暫免二分之一，⚠️ 與勞動事件法 12 條的三分之二不可混用）。
+
+**踩坑**
+
+1. ⛔ **Tailwind class 必須是完整字面字串**。第一版 `OptionCard` 寫了
+   `` border-${accent} ``，build 時會被 purge 掉（掃描器看不到組出來的字串），
+   而且 `gold-50` 根本不在 token 裡。改用 `Record<Tone, {...}>` 存整段 class。
+2. ⛔ **腳本必須跟路線一致**。第一版不論走哪條都給「我要申請勞資爭議調解」，
+   但走檢舉的人拿這句去窗口是錯的。已改 `scriptFor(goal)` 分流。
+3. ⚠️ **費用數字一律不寫**。民訴 77-20 的級距本次 MCP 查不到原文，
+   依「查不到就不引」全部寫「以法院公告為準」。
+4. ⚠️ `useSearchParams()` 需 `<Suspense>` 邊界，否則 build 出 CSR-bailout 錯誤。
+5. ⚠️ Windows + OneDrive 下 `.next` 會出 `EINVAL readlink`，
+   dev server 沒關就重 build 必失敗；要先停 server 再刪 `.next`。
+
+**驗證**
+
+- `npm run build` 兩種模式皆 **0 TypeScript 錯誤**，`/triage`、`/triage/result` 均靜態產生
+- **`buildResultPrompt` 輸出與拆分前逐字相同**（以腳本比對舊版 `SYSTEM_INSTRUCTION`
+  與新組合字串，長度 717 = 717，`True`）← 這是本次最重要的回歸基準
+- `python -m tools.check_frontend_statutes` → **OK 10／PROBLEM 0**／SKIP 4
+  （SKIP 為語料庫未收錄的勞動事件法，已另以 taiwan-law MCP 逐條覆核）
+- `pytest tests/ -q` → **15 passed**；`check_law_snippets` → PROBLEM 0
+- 375px 實機寬度：底部 5 個 tab 不擠壓；四種答案組合與**錯誤參數**皆正確渲染
+- 分享連結測試：直接開 `?g=&e=&s=` 網址即可還原結果（不依賴 sessionStorage）
+
+**⚠️ 尚未處理**
+- `promptTemplate.ts` 的 `SYSTEM_INSTRUCTION` 散文與後端 `SYSTEM_PROMPT` 仍未納入自動比對
+  （本次只拆格式、未動共用角色文字，故後端不需同步）
+- 請求權時效未查證，頁面上以 advisory 明說「本工具沒有幫你算」，並導向 1955
+
+---
+
 ## 技術決策記錄
 
 | 決策 | 選擇 | 原因 |

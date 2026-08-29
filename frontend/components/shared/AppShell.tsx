@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, ClipboardCheck, MessageCircle, BookOpen, Scale } from "lucide-react";
+import { Home, ClipboardCheck, MessageCircle, BookOpen, Scale, Compass } from "lucide-react";
 
+// ⚠️ 手機底部是 flex-1 均分，5 項時標籤要夠短（4 字以內）才不會擠壓
 const navItems = [
   { href: "/", label: "首頁", icon: Home },
+  { href: "/triage", label: "怎麼辦", icon: Compass },
   { href: "/check", label: "快速判斷", icon: ClipboardCheck },
   { href: "/ask", label: "情境詢問", icon: MessageCircle },
   { href: "/law", label: "法條查詢", icon: BookOpen },

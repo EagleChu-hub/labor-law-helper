@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageCircle, ShieldCheck, Zap, BookOpen, ClipboardCheck } from "lucide-react";
+import { MessageCircle, ShieldCheck, Zap, BookOpen, ClipboardCheck, Compass } from "lucide-react";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
 
 const scenarios = [
@@ -47,6 +47,25 @@ export default function HomePage() {
             不儲存個人資料 · 即時分析 · 依據現行勞基法
           </div>
         </div>
+      </section>
+
+      {/* 分流導引：擺在最前面，因為最多人卡在「我不知道該幹嘛」 */}
+      <section>
+        <Link
+          href="/triage"
+          className="group flex items-center gap-4 bg-card rounded-2xl border-2 border-navy-600 p-6 shadow-sm hover:shadow-[0_16px_34px_-22px_rgba(20,25,45,.4)] transition"
+        >
+          <span className="w-14 h-14 rounded-2xl bg-navy-50 flex items-center justify-center text-navy shrink-0">
+            <Compass size={28} strokeWidth={1.75} />
+          </span>
+          <span className="flex-1">
+            <h2 className="font-black text-xl text-ink">我該怎麼辦？</h2>
+            <p className="text-[15px] text-muted leading-relaxed mt-1">
+              不知道從哪裡開始？回答幾個問題，告訴你明天可以做什麼。
+            </p>
+          </span>
+          <span className="text-navy-600 font-bold text-lg shrink-0">→</span>
+        </Link>
       </section>
 
       {/* Two entry method cards */}
