@@ -246,6 +246,23 @@ total  = ot_max + 假日類金額（各自獨立相加）
 - Render 部署：在 Dashboard → Environment 設定 `GOOGLEAI_Studio_API_KEY`
 - 程式讀取：`os.getenv("GOOGLEAI_Studio_API_KEY") or os.getenv("GEMINI_API_KEY")`（雙 key 名兜底）
 
+#### ⛔ 已發生過一次外洩，且**永遠無法從歷史中移除**
+
+**初始提交（`7e3ceac`, 2026-05-26）的 `.env.example` 裡放的是「真實金鑰」而非佔位符**，
+於 `87c1db6`（2026-07-12）移除。但這是**公開 repo**——
+⛔ **移除只是讓它從當前檔案消失，任何人 `git log -p -- .env.example` 仍可取得該值。**
+Google 已偵測到公開外洩並自動停用該金鑰（見 `progress.md` PR 紀錄）。
+
+**⚠️ 待辦**：若尚未親自到 Google Cloud console 確認該金鑰已撤銷，**請去確認一次**
+——不要只依賴「自動停用」的通知。
+
+★ **教訓（比這個 key 本身重要）**：
+1. **`.env.example` 是要 commit 的檔案**，裡面**只能放佔位符**
+   （`GOOGLEAI_Studio_API_KEY=your-api-key-here`），一個真實字元都不能有。
+2. **secret 一旦推上公開 repo 就當作永久外洩**——刪掉、改掉、force push 都不算數，
+   ⛔ **唯一有效的處置是「撤銷並換新」**。
+3. 新增任何 `*.example`、README 範例、截圖前，先確認裡面沒有真值。
+
 ---
 
 ### ❾ JSX 裡比較符號不能直接用 `>`
