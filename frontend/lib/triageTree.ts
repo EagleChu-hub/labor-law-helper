@@ -30,6 +30,7 @@ const moj = (pcode: string, flno: string) =>
 const LSA = "N0030001"; // 勞動基準法
 const SDA = "N0020007"; // 勞資爭議處理法
 const LIA = "B0010064"; // 勞動事件法
+const EIA = "N0050021"; // 就業保險法
 
 /** 全部於 2026-08-30 以語料庫或 taiwan-law MCP 逐字覆核 */
 export const STATUTES: Record<string, StatuteRef> = {
@@ -140,6 +141,56 @@ export const STATUTES: Record<string, StatuteRef> = {
     source_url: moj(LIA, "38"),
     verified: true,
   },
+  // ⛔ 十日不變期間——整個流程裡最貴的一個坑：不動作＝答應
+  LIA29: {
+    key: "LIA29",
+    article_no: "勞動事件法第 29 條第 2、3 項",
+    quote:
+      "當事人或參加調解之利害關係人，對於前項方案，得於送達或受告知日後十日之不變期間內，提出異議。於前項期間內合法提出異議者，視為調解不成立，法院並應告知或通知當事人及參加調解之利害關係人；未於前項期間內合法提出異議者，視為已依該方案成立調解。",
+    source_url: moj(LIA, "29"),
+    verified: true,
+  },
+  // 申請調解的三條：管轄／應載明事項／調解方式
+  SDA9: {
+    key: "SDA9",
+    article_no: "勞資爭議處理法第 9 條第 1 項",
+    quote:
+      "勞資爭議當事人一方申請調解時，應向勞方當事人勞務提供地之直轄市或縣（市）主管機關提出調解申請書。",
+    source_url: moj(SDA, "9"),
+    verified: true,
+  },
+  SDA10: {
+    key: "SDA10",
+    article_no: "勞資爭議處理法第 10 條",
+    quote:
+      "調解之申請，應提出調解申請書，並載明下列事項：一、當事人姓名、性別、年齡、職業及住所或居所；如為法人、雇主團體或工會時，其名稱、代表人及事務所或營業所；有代理人者，其姓名、名稱及住居所或事務所。二、請求調解事項。三、依第十一條第一項選定之調解方式。",
+    source_url: moj(SDA, "10"),
+    verified: true,
+  },
+  SDA11: {
+    key: "SDA11",
+    article_no: "勞資爭議處理法第 11 條第 1 項",
+    quote:
+      "直轄市或縣（市）主管機關受理調解之申請，應依申請人之請求，以下列方式之一進行調解：一、指派調解人。二、組成勞資爭議調解委員會（以下簡稱調解委員會）。",
+    source_url: moj(SDA, "11"),
+    verified: true,
+  },
+  // 非自願離職證明的逃生門
+  EIA25_3: {
+    key: "EIA25_3",
+    article_no: "就業保險法第 25 條第 3 項",
+    quote:
+      "第一項離職證明文件，指由投保單位或直轄市、縣（市）主管機關發給之證明；其取得有困難者，得經公立就業服務機構之同意，以書面釋明理由代替之。",
+    source_url: moj(EIA, "25"),
+    verified: true,
+  },
+  LSA19: {
+    key: "LSA19",
+    article_no: "勞動基準法第 19 條",
+    quote: "勞動契約終止時，勞工如請求發給服務證明書，雇主或其代理人不得拒絕。",
+    source_url: moj(LSA, "19"),
+    verified: true,
+  },
 };
 
 // ─────────────────────────────────────────────
@@ -234,6 +285,8 @@ export type AdvisoryId =
   | "retaliation_void"
   | "sixty_day_notice"
   | "mediation_shield"
+  | "ten_day_trap"
+  | "separation_certificate"
   | "no_limitation_check";
 
 export interface TriageAdvisory {
@@ -309,6 +362,37 @@ export const ADVISORIES: Record<AdvisoryId, TriageAdvisory> = {
       "這是跟前面那條不一樣的另一道保護，兩個可以一起用。",
     ],
     statutes: ["SDA8"],
+  },
+  // ⛔ 整個流程裡最貴的一個坑。只適用「法院」勞動調解，不適用勞工局的行政調解
+  //    （後者依勞資爭議處理法 23 條需雙方合意，沒有這種自動成立機制）。
+  ten_day_trap: {
+    id: "ten_day_trap",
+    severity: "stop",
+    kind: "legal",
+    title: "⛔ 收到法院的方案後，十天內不講話就等於答應",
+    body: [
+      "法院調解如果雙方談不攏，法官那邊會直接提出一個方案給你。",
+      "你收到之後有十天可以說「我不同意」。",
+      "十天內沒有動作，法律上就當作你已經同意了，效力跟判決一樣。",
+      "這十天不能延長，過了也沒有補救。收到任何法院文件，先看日期。",
+    ],
+    statutes: ["LIA29"],
+  },
+  // ★ 8/26 曾因查不到原文而擱置，本次於語料庫查得就業保險法 25 條 3 項
+  separation_certificate: {
+    id: "separation_certificate",
+    severity: "warn",
+    kind: "legal",
+    title: "公司不給非自願離職證明，還有兩條路",
+    body: [
+      "這張紙關係到你能不能領失業給付，很多人卡在這裡。",
+      "① 先跟公司要。",
+      "② 公司不給——縣市政府勞工局也可以發給你，不是只有公司能發。",
+      "③ 還是拿不到——經公立就業服務機構同意，可以用書面寫明理由代替。",
+      "要在離職退保後兩年內辦；文件上要有你的姓名、公司名稱、離職原因。",
+      "另外：「服務證明書」是另一張紙，只要你開口要，公司就不能拒絕。",
+    ],
+    statutes: ["EIA25_3", "LSA19"],
   },
   no_limitation_check: {
     id: "no_limitation_check",
@@ -401,6 +485,10 @@ export function deriveTriage(a: TriageAnswers): TriageResult {
     primary = ["admin_mediation", "court_mediation"];
     headline = "去勞工局申請跟公司談，談不成再請法院談";
     reasons.push("你要的是拿回錢，這條路的終點才有強制力");
+    // ★ 修正：原本選「要拿回錢」的人完全看不到公法那條線的存在，
+    //   等於本頁最核心的「兩條線可以並行」對他消失了。
+    alsoConsider.push("agency");
+    reasons.push("你也可以同時請政府去查。那條線不會給你錢，但會留下對你有利的認定");
   } else {
     primary = ["agency", "admin_mediation"];
     headline = "兩件事分開辦，而且可以同時辦";
@@ -443,20 +531,29 @@ export function deriveTriage(a: TriageAnswers): TriageResult {
   }
 
   // ── 處境 ──
+  // ★ 修正：原本只對在職／被逼退者顯示。但已離職者同樣需要——
+  //   若當初的解僱本身就是報復，74 條 3 項的「無效」正是他最強的主張。
+  advisories.push("retaliation_void");
+
   if (a.employment === "being_fired") {
-    advisories.push("retaliation_void");
     actions.push({
       when: "now",
       label: "先不要簽任何東西",
       detail: "尤其是「自願離職」「同意書」。簽了之後事實會被改寫，你的證據要繞路。",
     });
-  } else if (a.employment === "in_job") {
-    advisories.push("retaliation_void");
+  }
+  if (a.employment === "left" || a.employment === "being_fired") {
+    advisories.push("separation_certificate");
   }
 
   advisories.push("anonymity_limits");
-  if (primary.includes("agency")) advisories.push("sixty_day_notice");
+  const goesToAgency = primary.includes("agency") || alsoConsider.includes("agency");
+  if (goesToAgency) advisories.push("sixty_day_notice");
   if (primary.includes("admin_mediation")) advisories.push("mediation_shield");
+  // ⛔ 只有法院勞動調解有「不異議即成立」的機制，行政調解沒有
+  if (primary.includes("court_mediation") || alsoConsider.includes("court_mediation")) {
+    advisories.push("ten_day_trap");
+  }
   advisories.push("no_limitation_check");
 
   // ── 每條路線的第一步 ──
@@ -468,11 +565,24 @@ export function deriveTriage(a: TriageAnswers): TriageResult {
       detail: p.effect,
     });
   }
+  // ★ alsoConsider 原本算出來卻從來沒被顯示過（等於白算）。一併列出，標明是可選的。
+  for (const id of alsoConsider) {
+    const p = PATHS[id];
+    actions.push({
+      when: "now",
+      label: `（可同時做）${p.plainName}：${p.where}`,
+      detail: p.effect,
+    });
+  }
   actions.push({
     when: "now",
     label: "不確定的話，先打 1955 問",
     detail: "免費、24 小時、有印尼／越南／泰國／菲律賓語通譯。",
   });
+
+  // 嚴重的排前面——⛔ 十日陷阱這種東西不能被排到最後才看到
+  const RANK = { stop: 0, warn: 1, info: 2 } as const;
+  advisories.sort((x, y) => RANK[ADVISORIES[x].severity] - RANK[ADVISORIES[y].severity]);
 
   return { answers: a, headline, primary, alsoConsider, blocked, reasons, advisories, actions, gate };
 }

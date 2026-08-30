@@ -15,6 +15,7 @@ import { checkAnalyze } from "@/lib/api";
 import { IS_OPENSOURCE } from "@/lib/mode";
 import { buildResultPrompt } from "@/lib/promptTemplate";
 import { OpenSourceAiButtons } from "@/components/shared/OpenSourceAiButtons";
+import { AdvisoryCard } from "@/components/triage/AdvisoryCard";
 import type { CheckResult, CheckRequest } from "@/types";
 
 function minutesToHours(min: number) {
@@ -292,6 +293,18 @@ export default function CheckResultPage() {
         </section>
       )}
 
+      {/* ⛔ 送件前的提醒必須在申訴連結「之上」。
+          先前這一段直接給連結，等於叫人去檢舉卻沒告訴他要先存證據、
+          也沒提醒他可能被認出來。文案複用 /triage 已逐字對過法條的版本，
+          ⛔ 不要在這裡另寫一份（會各自漂移）。 */}
+      {violationCount > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-[18px] font-black text-ink">要去申訴之前，先看這兩件事</h2>
+          <AdvisoryCard id="freeze_evidence" />
+          <AdvisoryCard id="anonymity_limits" />
+        </section>
+      )}
+
       {/* Complaint links — shown only when violations exist */}
       {violationCount > 0 && (
         <section className="bg-danger-soft border border-danger-border rounded-2xl p-4 space-y-3">
@@ -315,8 +328,25 @@ export default function CheckResultPage() {
               勞動部申訴信箱
             </a>
           </div>
+          {/* ⚠️ 上面那個連結只適用台北市。其他縣市的人不能被丟在這裡。 */}
+          <Link
+            href="/apply"
+            className="block py-2.5 px-4 bg-card border border-danger text-danger-deep rounded-lg text-sm font-bold text-center hover:brightness-95"
+          >
+            不在台北市？查你的縣市要去哪裡 →
+          </Link>
           <p className="text-xs text-muted">或撥打勞工諮詢專線：<strong>1955</strong></p>
         </section>
+      )}
+
+      {/* 不知道該走哪條路的人，導去分流 */}
+      {violationCount > 0 && (
+        <Link
+          href="/triage"
+          className="flex items-center justify-center gap-2 border border-line bg-card rounded-xl py-4 text-[16px] font-bold text-navy-700 hover:bg-canvas transition"
+        >
+          我該走哪條路？先幫我分流 →
+        </Link>
       )}
 
       {/* 加班費試算機（純前端） */}

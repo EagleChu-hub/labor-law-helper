@@ -36,7 +36,14 @@ PCODE_LAW = {
     "N0030001": "勞動基準法",
     "N0020007": "勞資爭議處理法",
     "B0010064": "勞動事件法",
+    "N0050021": "就業保險法",
 }
+
+# ⛔ 2026/8/30：新增就業保險法時，本檔的常數名正則原本只寫死 (LSA|SDA|LIA)，
+#    EIA 的那一筆被**靜默略過**——報表少一筆卻不會報錯，是靠人工數數才發現的。
+#    ★ 教訓：檢查工具的「涵蓋範圍」本身也要被檢查。故改為不列舉常數名，
+#      並在最後比對「TS 裡的 STATUTES 筆數」是否等於「解析出的筆數」，不符即報錯。
+_CONST_NAME = r"[A-Z]{2,4}"
 
 
 def norm(s: str) -> str:
@@ -73,7 +80,7 @@ def parse_ts():
     """從 triageTree.ts 取出 (article_no, quote, pcode, flno, verified)。"""
     src = open(TS, encoding="utf-8").read()
 
-    consts = dict(re.findall(r'const (LSA|SDA|LIA) = "([A-Z0-9]+)";', src))
+    consts = dict(re.findall(r'const (%s) = "([A-Z0-9]+)";' % _CONST_NAME, src))
 
     # 只掃 STATUTES 區塊，避免抓到別處的字串
     m = re.search(r"export const STATUTES[^=]*=\s*\{(.*?)\n\};", src, re.S)
@@ -85,8 +92,8 @@ def parse_ts():
     for block in re.finditer(
         r"article_no:\s*\"([^\"]+)\",\s*"
         r"quote:\s*\n?\s*\"((?:[^\"\\]|\\.)*)\",\s*"
-        r"source_url:\s*moj\((LSA|SDA|LIA),\s*\"([0-9-]+)\"\),\s*"
-        r"verified:\s*(true|false)",
+        r"source_url:\s*moj\((%s),\s*\"([0-9-]+)\"\),\s*"
+        r"verified:\s*(true|false)" % _CONST_NAME,
         body,
         re.S,
     ):
@@ -98,6 +105,16 @@ def parse_ts():
             "flno": flno,
             "verified": ver == "true",
         })
+
+    # ⛔ 涵蓋率自檢：STATUTES 裡有幾個 key，就該解析出幾筆。
+    #    少一筆而不報錯，正是本檔 2026/8/30 犯過的錯。
+    declared = len(re.findall(r"^  [A-Za-z0-9_]+: \{$", body, re.M))
+    if declared != len(entries):
+        sys.exit(
+            "⛔ 解析涵蓋率不符：STATUTES 宣告 %d 筆，只解析出 %d 筆。\n"
+            "   有法條被靜默略過——請檢查 parse_ts() 的正則與 PCODE_LAW 是否漏了新法規。"
+            % (declared, len(entries))
+        )
     return entries
 
 

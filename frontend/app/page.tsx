@@ -132,6 +132,12 @@ export default function HomePage() {
       </section>
 
       <DisclaimerBanner />
+
+      <p className="text-center">
+        <Link href="/about" className="text-[14px] text-muted underline">
+          這個網站為什麼在
+        </Link>
+      </p>
     </div>
   );
 }

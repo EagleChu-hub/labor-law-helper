@@ -9,6 +9,7 @@ import {
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
 import { OpenSourceAiButtons } from "@/components/shared/OpenSourceAiButtons";
 import { ScriptCard } from "@/components/triage/ScriptCard";
+import { AdvisoryCard } from "@/components/triage/AdvisoryCard";
 import { IS_OPENSOURCE } from "@/lib/mode";
 import { buildTriagePrompt } from "@/lib/promptTemplate";
 import {
@@ -161,29 +162,23 @@ function TriageResultInner() {
 
       <ScriptCard {...scriptFor(result.answers.goal)} />
 
+      {/* 走到調解路線的人，直接接到「去哪裡申請＋申請書草稿」 */}
+      {(result.primary.includes("admin_mediation") ||
+        result.alsoConsider.includes("admin_mediation")) && (
+        <Link
+          href="/apply"
+          className="flex items-center justify-center gap-2 bg-card border-2 border-navy rounded-2xl py-4 text-[16.5px] font-black text-navy-700 hover:bg-navy-50 transition print:hidden"
+        >
+          查我的縣市要去哪裡 ＋ 幫我寫申請書草稿 →
+        </Link>
+      )}
+
       {/* 提醒 */}
       <section className="space-y-3">
         <h2 className="text-[18px] font-black text-ink">要注意的事</h2>
-        {result.advisories.map((id) => {
-          const ad = ADVISORIES[id];
-          const tone =
-            ad.severity === "stop"
-              ? "border-danger-border bg-danger-soft"
-              : ad.severity === "warn"
-              ? "border-warn-border bg-warn-soft"
-              : "border-line bg-card";
-          return (
-            <div key={id} className={`rounded-2xl border p-5 space-y-2 ${tone}`}>
-              <h3 className="text-[16.5px] font-black text-ink leading-snug">{ad.title}</h3>
-              {ad.body.map((b) => (
-                <p key={b} className="text-[15.5px] text-ink leading-relaxed">{b}</p>
-              ))}
-              {ad.kind === "practice" && (
-                <p className="text-[13px] text-muted pt-0.5">※ 這是經驗提醒，不是法律規定。</p>
-              )}
-            </div>
-          );
-        })}
+        {result.advisories.map((id) => (
+          <AdvisoryCard key={id} id={id} />
+        ))}
       </section>
 
       {/* 帶走 */}
