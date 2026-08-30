@@ -184,6 +184,15 @@ export const STATUTES: Record<string, StatuteRef> = {
     source_url: moj(EIA, "25"),
     verified: true,
   },
+  // ⛔ 這條的對象是「國家」，不是雇主——本站唯一會讓使用者惹上刑責的風險點
+  EIA36: {
+    key: "EIA36",
+    article_no: "就業保險法第 36 條",
+    quote:
+      "以詐欺或其他不正當行為領取保險給付或為虛偽之證明、報告、陳述者，除按其領取之保險給付處以二倍罰鍰外，並應依民法請求損害賠償；其涉及刑責者，移送司法機關辦理。",
+    source_url: moj(EIA, "36"),
+    verified: true,
+  },
   LSA19: {
     key: "LSA19",
     article_no: "勞動基準法第 19 條",
@@ -391,8 +400,11 @@ export const ADVISORIES: Record<AdvisoryId, TriageAdvisory> = {
       "③ 還是拿不到——經公立就業服務機構同意，可以用書面寫明理由代替。",
       "要在離職退保後兩年內辦；文件上要有你的姓名、公司名稱、離職原因。",
       "另外：「服務證明書」是另一張紙，只要你開口要，公司就不能拒絕。",
+      "⛔ 但如果你已經找到新工作，就不能拿這張紙去領失業給付。",
+      "失業給付的前提是你還在找工作。已經就業還去領，會被追回兩倍罰鍰，嚴重的還會移送。",
+      "這張紙在那種情況下的用途，是把「非自願離職」這件事確定下來，不是拿去請領。",
     ],
-    statutes: ["EIA25_3", "LSA19"],
+    statutes: ["EIA25_3", "LSA19", "EIA36"],
   },
   no_limitation_check: {
     id: "no_limitation_check",
