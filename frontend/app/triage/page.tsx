@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   HandHeart, Compass, Coins, ShieldCheck, Scale, HelpCircle,
   Briefcase, LogOut, AlertTriangle, Phone, ArrowLeft,
+  ClipboardCheck, MessageCircleQuestion,
 } from "lucide-react";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
 import { OptionCard } from "@/components/triage/OptionCard";
@@ -76,6 +78,40 @@ export default function TriagePage() {
             />
           </div>
         </div>
+
+        {/* ⛔ 這個工具本身不判斷違不違法，本頁的兩題都預設你已經覺得有問題。
+            還不確定的人要先導去真的會判斷的兩個功能，不能讓他們硬答下去。 */}
+        <div className="bg-card rounded-[20px] border border-line shadow-sm p-6 space-y-4">
+          <h2 className="text-[17px] font-black text-ink">還不確定老闆有沒有違法？</h2>
+          <p className="text-[14.5px] text-muted -mt-2">這兩個工具會先幫你確認，這裡不會。</p>
+          <div className="grid gap-3">
+            <Link
+              href="/check"
+              className="flex items-center gap-4 px-5 py-4 rounded-2xl border border-line bg-canvas hover:border-navy-600 transition"
+            >
+              <span className="w-11 h-11 rounded-xl bg-navy-50 flex items-center justify-center text-navy shrink-0">
+                <ClipboardCheck size={22} strokeWidth={1.75} />
+              </span>
+              <span className="flex-1">
+                <span className="block text-[15.5px] font-extrabold text-ink">先算算我的班表對不對</span>
+                <span className="block text-[13.5px] text-muted mt-0.5">工時、加班費、排休——填一週紀錄自動檢查</span>
+              </span>
+            </Link>
+            <Link
+              href="/ask"
+              className="flex items-center gap-4 px-5 py-4 rounded-2xl border border-line bg-canvas hover:border-gold transition"
+            >
+              <span className="w-11 h-11 rounded-xl bg-gold-soft flex items-center justify-center text-gold-deep shrink-0">
+                <MessageCircleQuestion size={22} strokeWidth={1.75} />
+              </span>
+              <span className="flex-1">
+                <span className="block text-[15.5px] font-extrabold text-ink">用自己的話問問看</span>
+                <span className="block text-[13.5px] text-muted mt-0.5">調職、被刁難、其他狀況——描述情況就好</span>
+              </span>
+            </Link>
+          </div>
+        </div>
+
         <DisclaimerBanner />
       </div>
     );
