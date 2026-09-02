@@ -25,3 +25,12 @@ frontend/out/
 .DS_Store
 Thumbs.db
 *.log
+
+# ── Claude Code 本機工作區（settings.local.json 含個人權限設定、worktrees 為本機分支）──
+.claude/
+
+# ── ChromaDB 誤指字面路徑所產生之殘留 ──
+backend/__no_such_dir__/
+
+# ── 設計交接壓縮檔一律不進 repo（已移至 ../勞基法程式_設計交接資料/）──
+*.zip
