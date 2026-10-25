@@ -407,6 +407,33 @@ class TestAdvisoryProseIntegrity:
         assert any(lv == "PROBLEM" and "practice" in m for lv, m in found), found
 
     # ── 不得狼來了 ──────────────────────────────────────────
+    def test_時效advisory給得出可判斷的標準(self):
+        """⛔ PR16 起連續五個 PR，這一段都只寫「本工具沒有幫你算，去打 1955」。
+        ★ 期限長度是法條明文，勞工自己查得到，沒理由不告訴他
+          （全域指引：籠統的「建議諮詢專業人士」是雜訊）。
+        本測試鎖住它必須是 legal 且掛得上法條，不能退回純經驗談。
+        """
+        advs = {a["id"]: a for a, _ in self._all()}
+        a = advs["no_limitation_check"]
+        assert a["kind"] == "legal", "時效說明退回 practice（又變成沒有法源的空話）"
+        for k in ("CIV126", "CIV129", "LSA58", "LSA61", "EIA24"):
+            assert k in a["statutes"], "時效 advisory 少了 %s" % k
+        # ★ 最有用的那一句不能掉：聲請調解會中斷時效（民法 129），
+        #   這把「我來不來得及」變成「現在就去做這件事」。
+        assert "中斷" in a["body"], "漏掉時效中斷——那是這一段唯一可行動的出口"
+        assert "六個月" in a["body"], "漏掉民法 130 的六個月陷阱（只寄存證信函不夠）"
+
+    def test_指示詞不得被當成法律數量(self):
+        """⚠️「哪一天」「那一年」是指稱不是數量。
+        ⛔ 不剝掉的話，白話散文寫「每一筆錢是哪一天可以請求的」會被誤報成「1 日」無法源
+        ——而且會逼後人為了閃避檢查而寫出彆扭的中文。會逼人改爛文字的工具是壞工具。"""
+        from tools.check_prose_statutes import legal_numbers_of
+        assert legal_numbers_of("每一筆錢是哪一天可以請求的") == set()
+        assert legal_numbers_of("那一年的加班費") == set()
+        # 反向：法定數量不得被誤刪
+        assert legal_numbers_of("一年或不及一年之定期給付債權") == {"1年"}
+        assert legal_numbers_of("請求後六個月內不起訴") == {"6月"}
+
     def test_圈號與計數詞不得被當成法律數字(self):
         """⚠️「① ② ③」經 NFKC 會變成 1、2、3，「兩個可以一起用」也會被撿到。
         拿這些去比對法條，報表會被廢話灌滿。"""
