@@ -7,6 +7,7 @@
 
 執行後會在 CHROMA_PATH 建立 ChromaDB 集合。
 """
+import ast
 import os
 import sys
 import json
@@ -132,9 +133,77 @@ def build_index(chunks: list[dict]) -> None:
     logger.info("✓ 索引完成，共 %d 筆，存於 %s", len(chunks), CHROMA_PATH)
 
 
+def _breakdown(chunks: list[dict]) -> dict:
+    """逐來源統計 chunk 數：法規以 law_name 為單位，其餘以 doc_type 為單位。
+
+    ★ 為什麼不只看總數：某個法規爬失敗少了 60 筆、而函釋那天剛好多抓 60 筆，
+      **總數看起來毫無異狀**，法條卻已經不見了。這種失敗只有逐來源比對抓得到。
+    """
+    out: dict[str, int] = {}
+    for c in chunks:
+        meta = c.get("metadata") or {}
+        if isinstance(meta, str):
+            try:
+                meta = ast.literal_eval(meta)
+            except Exception:
+                meta = {}
+        key = (meta.get("law_name") if isinstance(meta, dict) else None) \
+            or c.get("doc_type") or "?"
+        out[key] = out.get(key, 0) + 1
+    return out
+
+
+def guard_cache_shrink(new_chunks: list[dict], force: bool = False) -> None:
+    """⛔ 拒絕用「縮水的語料」覆寫既有快取。
+
+    `raw_chunks_cache.json` 是 **Render 雲端唯一的法規來源**
+    （雲端沒有 ChromaDB，BM25 直接讀這個檔）。任何一個爬蟲斷線，
+    這裡就會靜默寫入一份少了法條的快取，commit 上去之後雲端就查不到那些條文
+    ——而且不會有任何錯誤訊息。
+
+    專案文件一直寫著「總數變少就不得保留，要 git checkout 還原」，
+    但那是**人工紀律**，沒有東西守著。本函數把它變成強制的。
+    """
+    if not CACHE_PATH.exists():
+        logger.warning("找不到既有快取，略過防縮水檢查（首次建立？）")
+        return
+
+    old = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+    old_n, new_n = len(old), len(new_chunks)
+    old_b, new_b = _breakdown(old), _breakdown(new_chunks)
+
+    logger.info("快取比對：%d → %d chunks", old_n, new_n)
+    lost = []
+    for key, n in sorted(old_b.items()):
+        got = new_b.get(key, 0)
+        flag = ""
+        if got < n:
+            lost.append((key, n, got))
+            flag = "  ⛔ 減少"
+        logger.info("  %-28s %5d → %5d%s", key, n, got, flag)
+    for key, n in sorted(new_b.items()):
+        if key not in old_b:
+            logger.info("  %-28s %5s → %5d  ★ 新增", key, "-", n)
+
+    if not lost:
+        return
+    msg = "；".join("%s %d→%d" % (k, a, b) for k, a, b in lost)
+    if force:
+        logger.warning("⚠️ 偵測到語料減少（%s），因 --force 仍繼續覆寫", msg)
+        return
+    logger.error("⛔ 偵測到語料減少，**不覆寫快取**：%s", msg)
+    logger.error("   多半是該來源當次爬取失敗（網路、對方網站改版）。")
+    logger.error("   請先確認原因；確定要覆寫請加 --force。既有快取維持不變。")
+    sys.exit(2)
+
+
 def main():
+    force = "--force" in sys.argv
     chunks = load_all_chunks()
     logger.info("共取得 %d 個 chunks", len(chunks))
+
+    # ⛔ 先過防縮水檢查，再覆寫快取（順序不能反）
+    guard_cache_shrink(chunks, force=force)
 
     # 快取原始 chunks（方便 BM25 離線載入，不需重新爬蟲）
     with open(CACHE_PATH, "w", encoding="utf-8") as f:

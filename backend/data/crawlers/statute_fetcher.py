@@ -38,6 +38,20 @@ LAWS = [
         "doc_type": "enforcement_rule",
         "alias": "地方主管機關受理最高負責人職場霸凌事件申訴處理辦法",
     },
+    # PR20：勞動事件法。
+    # ⛔ 不在 GitHub 靜態語料集裡（那份只收勞動部主管法規），所以必須自己爬。
+    # ★ 補這部法解決三件事：
+    #   ① `/triage` 有 7 筆勞動事件法引文，先前語料庫查不到，報表只能標 SKIP
+    #      （SKIP 不等於通過，每次都得人工以 MCP 覆核）
+    #   ② 勞工問「調解不成立怎麼辦」「要不要先經法院調解」時，RAG 原本撈不到條文
+    #   ③ 十日不變期間（29 條）這種最貴的陷阱，先前只能靠前端硬寫
+    # ⚠️ pcode 開頭是 B（司法院主管），與其他 N 開頭的勞動法規不同，不要誤植。
+    {
+        "name": "勞動事件法",
+        "pcode": "B0010064",
+        "doc_type": "statute",
+        "alias": "勞動事件法",
+    },
 ]
 
 LIST_URL = "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode={pcode}"

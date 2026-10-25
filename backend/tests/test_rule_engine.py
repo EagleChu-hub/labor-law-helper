@@ -417,5 +417,153 @@ class TestAdvisoryProseIntegrity:
         assert legal_numbers_of("十日之不變期間") == {"10日"}
 
 
+class TestCorpusCoverage:
+    """⛔ 語料庫涵蓋範圍的硬性檢查（PR20）
+
+    `raw_chunks_cache.json` 是 **Render 雲端唯一的法規來源**（雲端沒有 ChromaDB），
+    所以「某部法規在不在語料庫裡」不是內部細節，而是雲端查不查得到的分水嶺。
+    """
+
+    def _corpus(self):
+        import ast
+        import json
+        from pathlib import Path
+        p = Path(__file__).parent.parent / "data" / "raw_chunks_cache.json"
+        out = {}
+        for c in json.loads(p.read_text(encoding="utf-8")):
+            m = c.get("metadata")
+            if isinstance(m, str):
+                try:
+                    m = ast.literal_eval(m)
+                except Exception:
+                    m = {}
+            if isinstance(m, dict) and m.get("law_name"):
+                out.setdefault(m["law_name"], []).append(c)
+        return out
+
+    def test_必備法規都在語料庫裡(self):
+        """⛔ 迴歸鎖：任何一部掉出語料庫，雲端就查不到該法
+        （本機有 ChromaDB 不會發現，只有上線後使用者才會踩到）。
+
+        ⚠️ 勞動事件法是 PR20 才補進來的。在那之前 `/triage` 有 7 筆引用
+        只能標 SKIP，每次都得人工以 taiwan-law MCP 覆核。
+        """
+        corpus = self._corpus()
+        required = {
+            "勞動基準法": 90, "勞動基準法施行細則": 60, "職業安全衛生法": 55,
+            "職場霸凌防治措施準則": 25, "勞資爭議處理法": 60,
+            "就業保險法": 40, "勞動事件法": 50,
+        }
+        missing = {k: (len(corpus.get(k, [])), lo)
+                   for k, lo in required.items() if len(corpus.get(k, [])) < lo}
+        assert not missing, "語料庫缺漏或條數異常（實際, 下限）：%s" % missing
+
+    def test_triage引用的勞動事件法條文都查得到(self):
+        """★ PR20 之後這批不該再出現 SKIP——SKIP 不等於通過。"""
+        from tools.check_frontend_statutes import parse_ts, load_corpus
+        corpus = load_corpus()
+        missing = [e["article_no"] for e in parse_ts()
+                   if e["law"] == "勞動事件法"
+                   and corpus.get((e["law"], e["flno"])) is None]
+        assert not missing, "勞動事件法條文在語料庫查無：%s" % missing
+
+
+class TestCacheShrinkGuard:
+    """⛔ `build_index` 的防縮水守衛（PR20）
+
+    `raw_chunks_cache.json` 是雲端唯一的法規來源，而 `build_index` 原本
+    **無條件覆寫**它。任何一個爬蟲斷線，就會靜默寫入一份少了法條的快取，
+    commit 上去之後雲端查不到那些條文，而且沒有任何錯誤訊息。
+
+    專案文件一直寫著「總數變少就不得保留」，但那是**人工紀律**，沒有東西守著。
+    ★ 本類確認守衛真的會攔（沒觸發過的守衛等於沒有守衛）。
+    """
+
+    def _full(self):
+        import json
+        from data.build_index import CACHE_PATH
+        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+
+    def test_語料整批消失時會攔下(self):
+        from data.build_index import guard_cache_shrink
+        full = self._full()
+        shrunk = [c for c in full if "勞動基準法" not in str(c.get("metadata", ""))]
+        with pytest.raises(SystemExit) as e:
+            guard_cache_shrink(shrunk)
+        assert e.value.code == 2
+
+    def test_總數相同但某來源消失也會攔下(self):
+        """★ 這是加「逐來源比對」的理由：勞基法掉 98 筆、函釋剛好多抓 98 筆，
+        **總數看起來毫無異狀**，法條卻已經不見了。只看總數抓不到這種。"""
+        import copy
+        from data.build_index import guard_cache_shrink
+        full = self._full()
+        kept = [c for c in full if "勞動基準法'" not in str(c.get("metadata", ""))]
+        filler = []
+        for i in range(len(full) - len(kept)):
+            f = copy.deepcopy(full[0])
+            f["chunk_id"] = "fake_%d" % i
+            f["metadata"] = {"law_name": "勞動部函釋", "pcode": "X", "flno": str(i)}
+            filler.append(f)
+        same = kept + filler
+        assert len(same) == len(full), "測試前提：總數必須相同"
+        with pytest.raises(SystemExit) as e:
+            guard_cache_shrink(same)
+        assert e.value.code == 2
+
+    def test_只增不減時放行(self):
+        """⚠️ 守衛不能擋住正常的新增，否則沒人敢跑 build_index。"""
+        import copy
+        from data.build_index import guard_cache_shrink
+        full = self._full()
+        extra = copy.deepcopy(full[0])
+        extra["chunk_id"] = "brand_new"
+        extra["metadata"] = {"law_name": "新法規", "pcode": "Z", "flno": "1"}
+        guard_cache_shrink(full + [extra])      # 不該 raise
+
+
+class TestProceduralSynonyms:
+    """⛔ 訴訟程序口語 → 法條用詞的查詢擴充（PR20）
+
+    ★ 不加這組的話，PR20 新進語料庫的 53 條勞動事件法條文**形同沒進來**：
+      雲端只有 BM25 逐字比對，而勞工不會說「起訴」「出勤紀錄」，
+      他說「告公司」「打卡紀錄」。
+      實測：擴充前 top-5 命中 4/9，擴充後 8/9，對照組不受影響。
+    """
+
+    def _expand(self, q):
+        from domain.retriever.hybrid_retriever import _expand_query
+        return _expand_query(q)
+
+    def test_口語會被擴充成法條用詞(self):
+        assert "起訴" in self._expand("要告公司是不是要先調解")
+        assert "出勤紀錄" in self._expand("打卡紀錄能不能當證據")
+        assert "續行訴訟" in self._expand("調解不成立之後會怎樣")
+        assert "暫免徵收" in self._expand("裁判費要付多少")
+
+    def test_不相關查詢不得被擴充(self):
+        """⚠️ 擴充要精準。亂擴充會把不相關的條文拉進來，
+        反而稀釋原本正確的結果（PR12 已記過這個紀律）。"""
+        for q in ["今天天氣如何", "中午吃什麼"]:
+            assert self._expand(q) == q, "不相關查詢被擴充了：%s" % q
+
+    def test_訴訟程序口語實際檢索得到勞動事件法(self):
+        """⛔ 端到端：不是只看擴充字串，而是真的跑 BM25（模擬雲端無向量索引）。"""
+        import os
+        os.environ.setdefault("CHROMA_PATH", "./__nonexistent_for_test__")
+        from domain.retriever.bm25_retriever import bm25_search
+        cases = [
+            ("要告公司是不是一定要先經過調解", "勞動事件法第 16 條"),
+            ("法院給的調解方案我幾天內要回覆", "勞動事件法第 29 條"),
+            ("公司說我沒加班 打卡紀錄能不能當證據", "勞動事件法第 38 條"),
+        ]
+        bad = []
+        for q, want in cases:
+            titles = [r.get("title", "") for r in bm25_search(self._expand(q), top_k=5)]
+            if not any(want in t for t in titles):
+                bad.append((q, want, titles[:3]))
+        assert not bad, "口語問法查不到對應條文：%s" % bad
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

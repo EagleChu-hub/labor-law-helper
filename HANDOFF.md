@@ -1,7 +1,7 @@
 # 交接文件 — 勞基法查詢小幫手
 
 > 給下一位接手的 AI／開發者。讀完這份可以在 10 分鐘內知道專案長什麼樣、東西在哪、要改什麼動哪個檔。
-> 最後更新：2026-10-25（PR19：/triage advisory 散文納入法條自動比對）
+> 最後更新：2026-10-26（PR20：勞動事件法納入語料庫＋快取防縮水守衛）
 
 ---
 
@@ -10,8 +10,8 @@
 | 順序 | 檔案 | 為什麼 |
 |------|------|--------|
 | 1 | 本檔 `HANDOFF.md` | 全貌 + 常見任務對照表 |
-| 2 | `CLAUDE.md` | **踩坑規則（23 條）**，不讀會重複踩雷，尤其 ❶❸❺⓬⓯⓰⓴ |
-| 3 | `progress.md` | PR1～PR19 完整開發史，含每次修法的根因與驗證方式 |
+| 2 | `CLAUDE.md` | **踩坑規則（26 條）**，不讀會重複踩雷，尤其 ❶❸❺⓬⓯⓰⓴㉕ |
+| 3 | `progress.md` | PR1～PR20 完整開發史，含每次修法的根因與驗證方式 |
 | 4 | `README.md` | 對外的部署說明（給 fork 的人看的） |
 
 `design-handoff/` 是 PR13 的設計交接資料（brief + 設計稿 HTML + 截圖），已完成，僅供日後改視覺時對照。
@@ -120,8 +120,13 @@ PROBLEM／ERROR 必須是 0。這支抓的是結構化引用抓不到的東西�
 1. `backend/data/crawlers/statute_fetcher.py` 的 `LAWS` list 加一項（要有 `pcode` 和 `alias`）
 2. 若 GitHub 靜態來源已有舊版，在 `laws_for_rag_importer.py` 的 `_SKIP_LAWS` 排除，避免新舊重複
 3. 重建索引：`cd backend && python -m data.build_index`
-4. **驗證 `raw_chunks_cache.json` 總數只增不減**（目前 1782 chunks），若變少代表某來源爬取失敗，要 `git checkout` 還原
-5. **一定要 commit `backend/data/raw_chunks_cache.json`** — 雲端沒有 ChromaDB，BM25 直接讀這個檔，不 commit 等於雲端沒有新法條
+4. **防縮水守衛會自動擋**（PR20 起）：`build_index` 會逐來源比對，任一法規的 chunk 數減少就 `sys.exit(2)` 且**不覆寫**既有快取。要強制覆寫才加 `--force`。
+   ⚠️ 只比總數是不夠的（某法少 98 筆、函釋多 98 筆，總數不變但法條沒了），所以是逐來源比對。
+5. **commit 前再確認一次**：`git diff --numstat backend/data/raw_chunks_cache.json` 的**刪除行數必須是 0**（目前 1835 chunks）
+6. **一定要 commit `backend/data/raw_chunks_cache.json`** — 雲端沒有 ChromaDB，BM25 直接讀這個檔，不 commit 等於雲端沒有新法條
+7. ⛔ **一定要配一組口語同義詞並實測命中率**（`hybrid_retriever.py` 的 `_SYNONYMS`）。
+   PR20 實測：勞動事件法進語料庫後，勞工口語 top-5 命中只有 4/9，補同義詞後才到 8/9。
+   **沒補等於那些條文沒進來。**
 
 ### 「改 `/triage` 的 advisory 文案或法條」
 `frontend/lib/triageTree.ts` 的 `STATUTES`（結構化引文）與 `ADVISORIES`（給勞工讀的散文）。
