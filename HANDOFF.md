@@ -1,7 +1,7 @@
 # 交接文件 — 勞基法查詢小幫手
 
 > 給下一位接手的 AI／開發者。讀完這份可以在 10 分鐘內知道專案長什麼樣、東西在哪、要改什麼動哪個檔。
-> 最後更新：2026-08-30（PR16：分流導引頁 /triage）
+> 最後更新：2026-10-25（PR18：提示詞散文納入法條自動比對）
 
 ---
 
@@ -10,8 +10,8 @@
 | 順序 | 檔案 | 為什麼 |
 |------|------|--------|
 | 1 | 本檔 `HANDOFF.md` | 全貌 + 常見任務對照表 |
-| 2 | `CLAUDE.md` | **踩坑規則（14 條）**，不讀會重複踩雷，尤其 ❶❸❺⓬ |
-| 3 | `progress.md` | PR1～PR13 完整開發史，含每次修法的根因與驗證方式 |
+| 2 | `CLAUDE.md` | **踩坑規則（19 條）**，不讀會重複踩雷，尤其 ❶❸❺⓬⓯⓰ |
+| 3 | `progress.md` | PR1～PR18 完整開發史，含每次修法的根因與驗證方式 |
 | 4 | `README.md` | 對外的部署說明（給 fork 的人看的） |
 
 `design-handoff/` 是 PR13 的設計交接資料（brief + 設計稿 HTML + 截圖），已完成，僅供日後改視覺時對照。
@@ -101,9 +101,18 @@ cd backend && PYTHONIOENCODING=utf-8 python -m tools.check_law_snippets
 
 ### 「改 AI 回答的內容／口吻」
 - 私人版（走後端 Gemini）：`backend/domain/rag/answer_generator.py` 的 `SYSTEM_PROMPT`
-- 開源版（複製提示詞給 ChatGPT/Gemini）：`frontend/lib/promptTemplate.ts` 的 `SYSTEM_INSTRUCTION`
+- 開源版（複製提示詞給 ChatGPT/Gemini）：`frontend/lib/promptTemplate.ts` 的 `SYSTEM_ROLE`
 
 **兩邊要一起改**，否則兩個版本回答不一致。
+⚠️ PR18 實測：開源版的法律要件曾經漏得比私人版更多，而它才是**公開給所有勞工**的那一份。
+
+⛔ **改完一定要跑**（提示詞裡的散文法律敘述也會被比對）：
+```bash
+cd backend && PYTHONIOENCODING=utf-8 python -m tools.check_prose_statutes
+```
+PROBLEM／ERROR 必須是 0。這支抓的是結構化引用抓不到的東西——
+**許可型敘述漏抄合法化要件**（例如只寫「有報備變形工時就可以挪例假」，
+漏掉勞基法第 36 條第 4、5 項的四層要件），後果是 AI 對勞工說「你老闆是合法的」。
 
 ⚠️ Gemini 設定必須保留 `thinking_budget=0`，拿掉回答會截斷在 ~120 字（CLAUDE.md ❷）。
 
@@ -197,6 +206,7 @@ PR12 的生產事故就是因為向量檢索先載入 torch 才檢查索引存�
 | `.claude/` | 本機工具設定（launch.json），不進 git |
 | `Brief 文件讀取.zip`、`design-handoff-for-claude-design.zip` | 設計交接的壓縮檔，內容已解壓進 `design-handoff/`，冗餘 |
 | `backend/__no_such_dir__/` | PR12 測試 OOM 情境時留下的殘檔，可刪（先前刪除指令被權限攔下，還沒清） |
+| `.claude/worktrees/` | 舊 session 留下的 git worktree，內含**過期的** `promptTemplate.ts`（PR16 拆分前的版本）。⚠️ 搜尋程式碼時記得排除，不然會讀到舊版 |
 
 commit 前務必確認 `backend/.env` 沒被加進去。另外 `frontend/` 若出現獨立的 `.git` 目錄要刪掉（Next.js 建立時會自動 git init），否則父 repo `git add` 會失敗——**刪 `frontend/.git`，不是根目錄的 `.git`**。
 
@@ -208,10 +218,11 @@ commit 前務必確認 `backend/.env` 沒被加進去。另外 `frontend/` 若�
 ```bash
 cd backend && pytest tests/ -v
 ```
-若動到 `law_references`，另跑：
+若動到任何法律敘述（`law_references`、`STATUTES`、提示詞散文），**三支都要跑**：
 ```bash
-cd backend && PYTHONIOENCODING=utf-8 python -m tools.check_law_snippets
+cd backend && PYTHONIOENCODING=utf-8 python -m tools.check_law_snippets && PYTHONIOENCODING=utf-8 python -m tools.check_frontend_statutes && PYTHONIOENCODING=utf-8 python -m tools.check_prose_statutes
 ```
+PROBLEM／ERROR 必須是 0。WARN 是「改寫但未偵測到遺漏」，需人工判讀。
 加上手動打 API：`POST /api/v1/check/analyze` 帶一組真實出勤資料，確認金額與違規清單合理。
 
 **語料／檢索改動**
