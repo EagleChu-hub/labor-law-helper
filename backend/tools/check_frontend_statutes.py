@@ -188,6 +188,38 @@ _WORKER_DUTY_RE = re.compile(
     r"|應於[^。；]{0,16}?內補正[^。；]*")
 
 
+def parse_paths():
+    """從 triageTree.ts 取出 PATHS 的 id / 散文欄位 / statutes。
+
+    ⚠️ `effect`／`cannotDo`／`cost` 同樣是**直接印給勞工看的法律敘述**，
+       而且它們是使用者決定「要走哪條路」的依據——寫錯會讓他選錯程序。
+    """
+    src = open(TS, encoding="utf-8").read()
+    m = re.search(r"export const PATHS[^=]*=\s*\{(.*?)\n\};", src, re.S)
+    if not m:
+        sys.exit("找不到 PATHS 區塊")
+    body = m.group(1)
+
+    out = []
+    for blk in re.finditer(r"\n  ([a-z_]+): \{(.*?)\n  \},", body + "\n  },", re.S):
+        pid, inner = blk.group(1), blk.group(2)
+        texts = []
+        for field in ("name", "plainName", "where", "effect", "cannotDo", "cost"):
+            fm = re.search(r'%s:\s*"((?:[^"\\]|\\.)*)"' % field, inner)
+            if fm:
+                texts.append(fm.group(1))
+        sm = re.search(r"statutes:\s*\[(.*?)\]", inner, re.S)
+        keys = re.findall(r'"([A-Za-z0-9_]+)"', sm.group(1)) if sm else []
+        out.append({"id": pid, "kind": "legal", "body": "\n".join(texts),
+                    "statutes": keys})
+
+    declared = len(re.findall(r"^  [a-z_]+: \{$", body, re.M))
+    if declared != len(out):
+        sys.exit("⛔ PATHS 宣告 %d 筆，只解析出 %d 筆——有路線被靜默略過"
+                 % (declared, len(out)))
+    return out
+
+
 def check_advisory(adv, keymap, corpus):
     """比對 advisory 散文與其**自己宣告**的條文。回傳 [(level, msg)]。"""
     from tools.check_prose_statutes import (
@@ -240,6 +272,24 @@ def check_advisory(adv, keymap, corpus):
                 found.append(("PROBLEM",
                               "⛔ %s 的引文含**對勞工自己**的義務／限制，散文未提及"
                               "（4-gram %.0f%%）：「%s」" % (k, cov * 100, du[:58])))
+        # ⛔ 誠實回報「比不了」，不要回報 ✅。
+        #    但書／要件檢查都要先過「相關性門檻」（散文得與該條有字面重疊才算在談它），
+        #    而 PATHS 的散文是**完全改寫的白話**，與法條幾乎零重疊
+        #    → 所有檢查都被門檻擋掉 → 報表印出 ✅「未偵測到問題」。
+        #    ★ 那是假的安心：根本沒檢查過，卻讓人以為查過了。
+        #    沒檢查就說沒檢查——這比漏報更重要。
+        # ★ 但「改寫」不等於「無從查核」。若散文與引文共用法律數字
+        #   （散文寫「六十天」、法條寫「六十日」，正規化後都是 60日），
+        #   那至少關鍵數字是對上的，算有錨點，不必要求人工重看。
+        #   只有**字面無重疊且連一個共同數字都沒有**時，才是真的比不了。
+        if quote:
+            cov = coverage(pnorm(quote), n_body)
+            shared = legal_numbers_of(quote) & legal_numbers_of(adv["body"])
+            if cov < 0.15 and not shared:
+                found.append(("WARN",
+                              "⚠️ %s：散文與該條引文無字面重疊（4-gram %.0f%%）"
+                              "且無共同數字可當錨點，本工具**無法自動比對**"
+                              "——需人工確認語意是否吻合" % (k, cov * 100)))
         original = corpus.get((law, flno))
         if law not in laws:
             laws.append(law)
@@ -349,6 +399,28 @@ def main():
         icon = {"OK": "✅", "WARN": "⚠️ ", "PROBLEM": "⛔", "SKIP": "－"}[worst]
         print("%s %s（kind=%s，statutes=%s）"
               % (icon, adv["id"], adv["kind"], adv["statutes"] or "—"))
+        if not found:
+            print("   ✅ 未偵測到但書遺漏或引用不足")
+        for lv, msg in found:
+            print("   %s" % msg)
+        print()
+
+    # ── PATHS 散文 ─────────────────────────────────────────
+    paths = parse_paths()
+    print("=" * 72)
+    print("【PATHS 散文】使用者據以決定「走哪條路」的敘述（%d 筆）" % len(paths))
+    print("=" * 72)
+    for p in paths:
+        found = check_advisory(p, keymap, corpus)
+        worst = "OK"
+        for lv, _ in found:
+            if lv == "PROBLEM":
+                worst = "PROBLEM"
+            elif lv in ("WARN", "SKIP") and worst == "OK":
+                worst = lv
+        tally[worst] = tally.get(worst, 0) + 1
+        icon = {"OK": "✅", "WARN": "⚠️ ", "PROBLEM": "⛔", "SKIP": "－"}[worst]
+        print("%s %s（statutes=%s）" % (icon, p["id"], p["statutes"] or "—"))
         if not found:
             print("   ✅ 未偵測到但書遺漏或引用不足")
         for lv, msg in found:

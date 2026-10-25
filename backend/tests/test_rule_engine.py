@@ -444,6 +444,47 @@ class TestAdvisoryProseIntegrity:
         assert legal_numbers_of("十日之不變期間") == {"10日"}
 
 
+class TestPathProseIntegrity:
+    """⛔ `/triage` 五條路線的散文檢查（PR22）
+
+    `PATHS[*].effect` / `cannotDo` / `cost` 是**使用者據以決定走哪條路**的敘述
+    ——寫錯會讓他選錯程序，代價比看錯一條法條更大。
+    """
+
+    def _all(self):
+        from tools.check_frontend_statutes import (
+            parse_paths, parse_statute_keys, load_corpus, check_advisory)
+        corpus, keymap = load_corpus(), parse_statute_keys()
+        return [(p, check_advisory(p, keymap, corpus)) for p in parse_paths()]
+
+    def test_五條路線都解析得到(self):
+        """⚠️ 承 PR17 教訓：檢查工具的涵蓋範圍本身也要被檢查。"""
+        ids = {p["id"] for p, _ in self._all()}
+        assert ids == {"internal", "agency", "admin_mediation",
+                       "court_mediation", "litigation"}, ids
+
+    def test_路線散文無但書遺漏或引用不足(self):
+        bad = [(p["id"], [m for lv, m in f if lv == "PROBLEM"])
+               for p, f in self._all() if any(lv == "PROBLEM" for lv, _ in f)]
+        assert not bad, "路線散文有問題：%s" % bad
+
+    def test_訴訟路線不得寫成不能直接起訴(self):
+        """⛔ 迴歸鎖：原文寫「不能直接打」，但勞動事件法第 16 條第 2 項明定
+        「前項事件當事人逕向法院起訴者，**視為調解之聲請**」——不是退件。
+        ★ 把附例外的規定講成絕對的規定，會讓勞工以為送件會被拒絕而不敢送。"""
+        p = {x["id"]: x for x, _ in self._all()}["litigation"]
+        assert "不能直接打" not in p["body"], "又把 16 條講成絕對禁止了"
+        assert "視為聲請調解" in p["body"] or "視為調解之聲請" in p["body"] \
+            or "視為聲請" in p["body"], "沒講出逕行起訴會被視為調解聲請"
+
+    def test_內部申訴路線要講出它啟動的保護(self):
+        """⛔ 迴歸鎖：原文只寫「幾乎沒有強制力」，等於告訴勞工這步沒用。
+        但勞基法第 74 條第 2、3 項的報復保護正是「為前項申訴」才啟動的
+        ——這步拿不到錢，卻會打開他最硬的那面盾。"""
+        p = {x["id"]: x for x, _ in self._all()}["internal"]
+        assert "無效" in p["body"], "沒講出申訴會讓後續報復處分無效"
+
+
 class TestCorpusCoverage:
     """⛔ 語料庫涵蓋範圍的硬性檢查（PR20）
 
