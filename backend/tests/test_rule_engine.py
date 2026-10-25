@@ -317,5 +317,105 @@ class TestProseStatuteIntegrity:
             assert cjk_to_int(s) == want, "%s → %s（應為 %s）" % (s, cjk_to_int(s), want)
 
 
+class TestAdvisoryProseIntegrity:
+    """⛔ `/triage` advisory 散文的硬性檢查（PR19）
+
+    ★ 這批文字是**全站風險最高的法律敘述**：直接印在畫面上給勞工讀，
+      中間連 LLM 都沒有，它說什麼勞工就信什麼。
+      但在 PR19 之前只驗過 `STATUTES` 的 `quote`，**advisory 的散文沒驗過**。
+
+    完整報表見 `tools/check_frontend_statutes.py`。
+    """
+
+    def _all(self):
+        from tools.check_frontend_statutes import (
+            parse_advisories, parse_statute_keys, load_corpus, check_advisory)
+        corpus, keymap = load_corpus(), parse_statute_keys()
+        return [(a, check_advisory(a, keymap, corpus)) for a in parse_advisories()]
+
+    # ── 正向鎖 ──────────────────────────────────────────────
+    def test_advisory_散文無但書遺漏或引用不足(self):
+        bad = [(a["id"], [m for lv, m in f if lv == "PROBLEM"])
+               for a, f in self._all() if any(lv == "PROBLEM" for lv, _ in f)]
+        assert not bad, "advisory 散文有問題：%s" % bad
+
+    def test_practice_類型不得掛法條(self):
+        """⛔ `triageTree.ts` 註解聲稱「型別上就不可能掛法條」，但
+        TypeScript 的 `kind: "legal" | "practice"` 配 `statutes: string[]`
+        **並不會**強制這件事——它只是個約定。約定要有東西守著才算數。"""
+        bad = [a["id"] for a, _ in self._all()
+               if a["kind"] == "practice" and a["statutes"]]
+        assert not bad, "kind=practice 卻掛了法條：%s（經驗談不該掛法條）" % bad
+
+    def test_legal_類型必須有法條依據(self):
+        bad = [a["id"] for a, _ in self._all()
+               if a["kind"] == "legal" and not a["statutes"]]
+        assert not bad, "kind=legal 卻沒有法條依據：%s" % bad
+
+    # ── 反向鎖：故意注入壞資料，工具必須叫 ──────────────────
+    def test_偵測得到漏講勞工自己的義務(self):
+        """⛔ PR19 修正前的原文：`mediation_shield` 只寫「公司不可以…」，
+        漏掉勞資爭議處理法第 8 條同一條對勞方的要求
+        （不得因該勞資爭議事件而罷工或為其他爭議行為）。
+
+        ★ 本站立場親勞工，寫作時系統性地容易只寫雇主那一半
+          ——而漏掉的那一半正是會讓勞工自己踩進去的部分。
+        """
+        from tools.check_frontend_statutes import (
+            parse_statute_keys, load_corpus, check_advisory)
+        found = check_advisory(
+            {"id": "x", "kind": "legal", "statutes": ["SDA8"],
+             "body": "在調解進行的期間，公司不可以因為這件事就把你解僱或做其他對你不利的事。"},
+            parse_statute_keys(), load_corpus())
+        assert any(lv == "PROBLEM" and "對勞工自己" in m for lv, m in found), found
+
+    def test_偵測得到引文撐不住散文的數字(self):
+        """⛔ PR19 修正前的原文：`separation_certificate` 寫了「兩年內辦」，
+        但 statutes 只列就業保險法第 25 條第 3 項——那一項的引文裡沒有「二年」
+        （期限在第 1 項）。勞工看到的是引文，引文撐不住就等於沒有依據。
+
+        ★ 這一條同時鎖住檢查的**粒度**：語料庫以「條」為單位，
+          整條當然含「二年」，所以比對基準必須是**畫面顯示的引文**，不是整條。
+        """
+        from tools.check_frontend_statutes import (
+            parse_statute_keys, load_corpus, check_advisory)
+        found = check_advisory(
+            {"id": "x", "kind": "legal", "statutes": ["EIA25_3"],
+             "body": "要在離職退保後兩年內辦。"},
+            parse_statute_keys(), load_corpus())
+        assert any(lv == "PROBLEM" and "引文" in m for lv, m in found), found
+
+    def test_偵測得到body誤用markdown(self):
+        """⛔ `AdvisoryCard` 以 `{b}` 純文字渲染 body，寫 `**粗體**` 會原樣印出來。
+        CLAUDE.md ⓭ 在 PR17 就記過這個坑，PR19 寫新文案時**還是踩了**
+        （畫面上真的印出字面的「**不等於就沒事了**」）。
+        ★ 寫在文件裡不夠——重複犯的錯要有東西守著。"""
+        from tools.check_frontend_statutes import (
+            parse_statute_keys, load_corpus, check_advisory)
+        found = check_advisory(
+            {"id": "x", "kind": "practice", "statutes": [],
+             "body": "你**仍然可以**先請領失業給付。"},
+            parse_statute_keys(), load_corpus())
+        assert any(lv == "PROBLEM" and "markdown" in m for lv, m in found), found
+
+    def test_偵測得到practice掛法條(self):
+        from tools.check_frontend_statutes import (
+            parse_statute_keys, load_corpus, check_advisory)
+        found = check_advisory(
+            {"id": "x", "kind": "practice", "statutes": ["LSA19"], "body": "隨便寫。"},
+            parse_statute_keys(), load_corpus())
+        assert any(lv == "PROBLEM" and "practice" in m for lv, m in found), found
+
+    # ── 不得狼來了 ──────────────────────────────────────────
+    def test_圈號與計數詞不得被當成法律數字(self):
+        """⚠️「① ② ③」經 NFKC 會變成 1、2、3，「兩個可以一起用」也會被撿到。
+        拿這些去比對法條，報表會被廢話灌滿。"""
+        from tools.check_prose_statutes import legal_numbers_of
+        assert legal_numbers_of("① 先跟公司要。② 公司不給。③ 還是拿不到。") == set()
+        assert legal_numbers_of("這是另一道保護，兩個可以一起用。") == set()
+        assert legal_numbers_of("要在離職退保後二年內辦") == {"2年"}
+        assert legal_numbers_of("十日之不變期間") == {"10日"}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

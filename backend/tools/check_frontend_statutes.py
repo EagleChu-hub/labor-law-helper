@@ -118,6 +118,184 @@ def parse_ts():
     return entries
 
 
+# ── advisory 散文檢查（PR19 新增）──────────────────────────────
+# ⛔ 為什麼要補這一段：本檔原本只驗 `STATUTES` 的 `quote`（結構化引文），
+#    但 `ADVISORIES[*].body` 是**直接印在畫面上給勞工讀的散文**，
+#    中間連 LLM 都沒有，它說什麼勞工就信什麼——卻從來沒有被比對過。
+#    ★ 這是全站風險最高的法律文字，比提示詞還高（提示詞至少還經過 LLM 重述）。
+# ★ 這裡比提示詞好驗：advisory 的 `statutes: [...]` 已經**明確宣告**了它依據哪幾條，
+#   不必像 check_prose_statutes 那樣從散文裡猜法規名。
+
+def parse_statute_keys():
+    """key → (law, flno, quote)，供 advisory 的 statutes 欄位解析。
+
+    ⚠️ `quote` 一併帶出來，因為勞工在畫面上看到的是 quote（通常只有其中一「項」），
+       不是整條。「這個數字在不在他看得到的文字裡」才是對他有意義的問題。
+    """
+    src = open(TS, encoding="utf-8").read()
+    consts = dict(re.findall(r'const (%s) = "([A-Z0-9]+)";' % _CONST_NAME, src))
+    m = re.search(r"export const STATUTES[^=]*=\s*\{(.*?)\n\};", src, re.S)
+    body = m.group(1)
+    out = {}
+    for blk in re.finditer(
+            r"\n  ([A-Za-z0-9_]+): \{(.*?)\n  \},", body + "\n  },", re.S):
+        key, inner = blk.group(1), blk.group(2)
+        mm = re.search(r"source_url:\s*moj\((%s),\s*\"([0-9-]+)\"\)" % _CONST_NAME, inner)
+        qm = re.search(r"quote:\s*\n?\s*\"((?:[^\"\\]|\\.)*)\"", inner, re.S)
+        if mm:
+            out[key] = (PCODE_LAW.get(consts.get(mm.group(1), ""), "?"),
+                        mm.group(2), qm.group(1) if qm else "")
+    return out
+
+
+def parse_advisories():
+    """從 triageTree.ts 取出 ADVISORIES 的 id / kind / body / statutes。"""
+    src = open(TS, encoding="utf-8").read()
+    m = re.search(r"export const ADVISORIES[^=]*=\s*\{(.*?)\n\};", src, re.S)
+    if not m:
+        sys.exit("找不到 ADVISORIES 區塊")
+    body = m.group(1)
+
+    out = []
+    for blk in re.finditer(r"\n  ([a-z0-9_]+): \{(.*?)\n  \},", body + "\n  },", re.S):
+        aid, inner = blk.group(1), blk.group(2)
+        kind = (re.search(r'kind:\s*"(\w+)"', inner) or [None, "?"])[1] \
+            if re.search(r'kind:\s*"(\w+)"', inner) else "?"
+        bm = re.search(r"body:\s*\[(.*?)\]", inner, re.S)
+        lines = re.findall(r'"((?:[^"\\]|\\.)*)"', bm.group(1)) if bm else []
+        sm = re.search(r"statutes:\s*\[(.*?)\]", inner, re.S)
+        keys = re.findall(r'"([A-Za-z0-9_]+)"', sm.group(1)) if sm else []
+        out.append({"id": aid, "kind": kind, "body": "\n".join(lines), "statutes": keys})
+
+    # ⛔ 涵蓋率自檢（承 PR17 教訓：檢查工具的涵蓋範圍本身也要被檢查）
+    declared = len(re.findall(r"^  [a-z0-9_]+: \{$", body, re.M))
+    if declared != len(out):
+        sys.exit("⛔ ADVISORIES 宣告 %d 筆，只解析出 %d 筆——有 advisory 被靜默略過"
+                 % (declared, len(out)))
+    return out
+
+
+# body 誤用 markdown。AdvisoryCard 以 `{b}` 純文字渲染，寫了會原樣顯示。
+_MARKDOWN_RE = re.compile(r"\*\*|__|^\s*[#>]\s|\[[^\]]+\]\([^)]+\)", re.M)
+
+# 課予**勞工自身**義務／限制的語句。本站立場親勞工，寫作時系統性地容易只寫
+# 「雇主不得…」而漏掉同一條對勞工的要求——漏掉等於讓勞工踩進去。
+# （repo 既有的 EIA36 刑責警告就是這類補強，本檢查把它制度化。）
+_WORKER_DUTY_RE = re.compile(
+    r"勞方不得[^。；]*|勞工不得[^。；]*|申請人[^。；]{0,8}?應[^。；]*"
+    r"|不得請領[^。；]*|應[^。；]{0,10}?返還[^。；]*|視為未申請[^。；]*"
+    r"|應於[^。；]{0,16}?內補正[^。；]*")
+
+
+def check_advisory(adv, keymap, corpus):
+    """比對 advisory 散文與其**自己宣告**的條文。回傳 [(level, msg)]。"""
+    from tools.check_prose_statutes import (
+        coverage, norm as pnorm, numbers_of, legal_numbers_of,
+        _PROVISO_RE, _XREF_RE)
+
+    found = []
+
+    # ⛔ body 是**純文字**渲染（AdvisoryCard 的 `{b}`），不吃 markdown。
+    #    CLAUDE.md ⓭ 在 PR17 就記過這個坑，PR19 寫新文案時**還是踩了**
+    #    ——畫面上真的印出了字面的「**不等於就沒事了**」。
+    # ★ 結論：寫在文件裡不夠，得有東西守著。重複犯的錯要自動化掉。
+    if _MARKDOWN_RE.search(adv["body"]):
+        found.append(("PROBLEM",
+                      "⛔ body 含 markdown 標記（%s）——AdvisoryCard 以純文字渲染，"
+                      "會原樣印在畫面上給勞工看到"
+                      % "、".join(sorted(set(_MARKDOWN_RE.findall(adv["body"]))))))
+
+    # ⛔ 型別不變式：kind === "practice" 時 statutes 必須是空陣列。
+    #    triageTree.ts 的註解聲稱「型別上就不可能掛法條」，但
+    #    TypeScript 的 `kind: "legal" | "practice"` 配 `statutes: string[]`
+    #    **並不會**強制這件事——它只是個約定。約定要有東西守著才算數。
+    if adv["kind"] == "practice" and adv["statutes"]:
+        found.append(("PROBLEM", "⛔ kind=\"practice\" 卻掛了法條 %s"
+                      "——經驗談不該掛法條（會被敵意讀者抓來反打）" % adv["statutes"]))
+    if adv["kind"] == "legal" and not adv["statutes"]:
+        found.append(("PROBLEM", "⛔ kind=\"legal\" 卻沒有任何法條依據"))
+
+    if not adv["statutes"]:
+        return found
+
+    n_body = pnorm(adv["body"])
+    cited_nums, law_nums, laws = set(), set(), []
+    quote_nums = set()          # ★ 畫面上**實際顯示**的引文裡的數字
+    missing_keys = []
+    unresolved = False
+    for k in adv["statutes"]:
+        if k not in keymap:
+            missing_keys.append(k)
+            continue
+        law, flno, quote = keymap[k]
+        quote_nums |= legal_numbers_of(quote)
+        # ⛔ 勞工自身的義務／限制：同一條裡課予勞工的部分，散文有沒有講
+        for du in dict.fromkeys(_WORKER_DUTY_RE.findall(quote)):
+            du_n = pnorm(_XREF_RE.sub("", du))
+            if len(du_n) < 8:
+                continue
+            cov = coverage(du_n, n_body)
+            if cov < 0.40:
+                found.append(("PROBLEM",
+                              "⛔ %s 的引文含**對勞工自己**的義務／限制，散文未提及"
+                              "（4-gram %.0f%%）：「%s」" % (k, cov * 100, du[:58])))
+        original = corpus.get((law, flno))
+        if law not in laws:
+            laws.append(law)
+        if original is None:
+            unresolved = True
+            found.append(("SKIP", "－ 語料庫未收錄《%s》第 %s 條（%s）"
+                                  "，**不等於通過**，須以 taiwan-law 覆核" % (law, flno, k)))
+            continue
+        clean = _PREFIX_RE.sub("", original, count=1)
+        cited_nums |= legal_numbers_of(clean)
+
+        # 但書逐「項」檢查 + 相關性門檻（與 check_prose_statutes 同一套理由：
+        # 散文在講第 1 項，沒有義務複述第 3 項的除外規定）
+        for p in [x for x in clean.split("\n") if len(pnorm(x)) > 5]:
+            core = pnorm(_PROVISO_RE.sub("", p))
+            if len(core) < 8 or coverage(core, n_body) < 0.25:
+                continue
+            for pv in dict.fromkeys(_PROVISO_RE.findall(p)):
+                pv_n = pnorm(_XREF_RE.sub("", pv))
+                if len(pv_n) < 8:
+                    continue
+                cov = coverage(pv_n, n_body)
+                if cov < 0.40:
+                    found.append(("PROBLEM",
+                                  "⛔ %s 所述之該項含但書／除外規定而散文未涵蓋"
+                                  "（4-gram %.0f%%）：「%s」" % (k, cov * 100, pv[:58])))
+
+    for k in missing_keys:
+        found.append(("PROBLEM", "⛔ statutes 列了 %s，但 STATUTES 裡沒有這個 key" % k))
+
+    # 散文講了數字，但所引條文裡沒有 → 可能引用不足（漏列條號）或無法源
+    # ⛔ 只在所引條文**全部都查得到**時才做這項：有任何一條語料庫沒收錄（如勞動事件法），
+    #    比對基準就是殘缺的，據以報「查無法源」會是冤枉的假警報。
+    #    查不到就說查不到（上面的 SKIP），不要假裝比對過。
+    if unresolved:
+        return found
+    for law in laws:
+        law_nums |= {n for (l, f), t in corpus.items() if l == law
+                     for n in legal_numbers_of(_PREFIX_RE.sub("", t, count=1))}
+    for n in sorted(legal_numbers_of(adv["body"])):
+        if n in quote_nums:
+            continue
+        # ★ 分三級。關鍵在於區分「條對不對」與「**畫面上給勞工看的引文**撐不撐得住」：
+        #   語料庫以「條」為單位，而 STATUTES 的 quote 往往只抄其中一「項」。
+        #   勞工看到的是 quote，不是整條——quote 裡沒有的數字，對他而言就是沒有依據。
+        if n in cited_nums:
+            found.append(("PROBLEM",
+                          "⛔ 散文的「%s」雖在所引之條文內，但**不在畫面顯示的引文**裡"
+                          "——勞工看不到依據，請補一筆對應該「項」的 STATUTES" % n))
+        elif n in law_nums:
+            found.append(("PROBLEM", "⛔ 散文的「%s」不在所宣告的條文中，但存在於同法他條"
+                                     "——**引用不足**，請把那一條列進 statutes" % n))
+        else:
+            found.append(("WARN", "⚠️ 散文的「%s」在所引法規中查無——請確認法源" % n))
+    return found
+
+
 def main():
     corpus = load_corpus()
     entries = parse_ts()
@@ -150,6 +328,30 @@ def main():
         print("   %s" % msg)
         if level == "PROBLEM":
             print("   引文：%s" % e["quote"][:110])
+        print()
+
+    # ── advisory 散文 ──────────────────────────────────────
+    keymap = parse_statute_keys()
+    advisories = parse_advisories()
+    print("=" * 72)
+    print("【ADVISORIES 散文】直接印給勞工看的法律敘述（%d 筆）" % len(advisories))
+    print("=" * 72)
+    for adv in advisories:
+        found = check_advisory(adv, keymap, corpus)
+        worst = "OK"
+        for lv, _ in found:
+            if lv == "PROBLEM":
+                worst = "PROBLEM"
+            elif lv in ("WARN", "SKIP") and worst == "OK":
+                worst = lv
+        tally[worst] = tally.get(worst, 0) + 1
+        icon = {"OK": "✅", "WARN": "⚠️ ", "PROBLEM": "⛔", "SKIP": "－"}[worst]
+        print("%s %s（kind=%s，statutes=%s）"
+              % (icon, adv["id"], adv["kind"], adv["statutes"] or "—"))
+        if not found:
+            print("   ✅ 未偵測到但書遺漏或引用不足")
+        for lv, msg in found:
+            print("   %s" % msg)
         print()
 
     print("── 統計 ──")

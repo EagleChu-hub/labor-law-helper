@@ -1,7 +1,7 @@
 # 交接文件 — 勞基法查詢小幫手
 
 > 給下一位接手的 AI／開發者。讀完這份可以在 10 分鐘內知道專案長什麼樣、東西在哪、要改什麼動哪個檔。
-> 最後更新：2026-10-25（PR18：提示詞散文納入法條自動比對）
+> 最後更新：2026-10-25（PR19：/triage advisory 散文納入法條自動比對）
 
 ---
 
@@ -10,8 +10,8 @@
 | 順序 | 檔案 | 為什麼 |
 |------|------|--------|
 | 1 | 本檔 `HANDOFF.md` | 全貌 + 常見任務對照表 |
-| 2 | `CLAUDE.md` | **踩坑規則（19 條）**，不讀會重複踩雷，尤其 ❶❸❺⓬⓯⓰ |
-| 3 | `progress.md` | PR1～PR18 完整開發史，含每次修法的根因與驗證方式 |
+| 2 | `CLAUDE.md` | **踩坑規則（23 條）**，不讀會重複踩雷，尤其 ❶❸❺⓬⓯⓰⓴ |
+| 3 | `progress.md` | PR1～PR19 完整開發史，含每次修法的根因與驗證方式 |
 | 4 | `README.md` | 對外的部署說明（給 fork 的人看的） |
 
 `design-handoff/` 是 PR13 的設計交接資料（brief + 設計稿 HTML + 截圖），已完成，僅供日後改視覺時對照。
@@ -122,6 +122,21 @@ PROBLEM／ERROR 必須是 0。這支抓的是結構化引用抓不到的東西�
 3. 重建索引：`cd backend && python -m data.build_index`
 4. **驗證 `raw_chunks_cache.json` 總數只增不減**（目前 1782 chunks），若變少代表某來源爬取失敗，要 `git checkout` 還原
 5. **一定要 commit `backend/data/raw_chunks_cache.json`** — 雲端沒有 ChromaDB，BM25 直接讀這個檔，不 commit 等於雲端沒有新法條
+
+### 「改 `/triage` 的 advisory 文案或法條」
+`frontend/lib/triageTree.ts` 的 `STATUTES`（結構化引文）與 `ADVISORIES`（給勞工讀的散文）。
+
+⛔ **改完一定要跑**：
+```bash
+cd backend && PYTHONIOENCODING=utf-8 python -m tools.check_frontend_statutes
+```
+⚠️ 這批散文是**全站風險最高的法律文字**——直接印在畫面上，中間連 LLM 都沒有。
+檢查會抓：但書遺漏／**勞工自身義務遺漏**／**引文撐不住散文**／型別不變式／誤用 markdown。
+
+三個最容易犯的錯（都已自動化，見 CLAUDE.md ⓴㉑㉒）：
+1. 只抄對勞工有利的那一半（勞資爭議處理法 8 條也禁止勞方罷工）
+2. 散文講的數字不在畫面顯示的 `quote` 裡（期限在第 1 項，卻只引第 3 項）
+3. `body` 寫 `**粗體**`——純文字渲染，會原樣印出來
 
 ### 「勞工用口語問但查不到法條」
 `backend/domain/retriever/hybrid_retriever.py` 的 `_SYNONYMS` 加口語→法律用語對照（如 排擠→孤立）。雲端只有 BM25 逐字比對，同義詞擴充是唯一補救手段。

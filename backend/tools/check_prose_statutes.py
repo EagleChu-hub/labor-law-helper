@@ -250,6 +250,19 @@ def numbers_of(text: str) -> set:
     return out
 
 
+def legal_numbers_of(text: str) -> set:
+    """只取**帶單位**的數字（與分數）。
+
+    ⛔ 散文裡的裸數字幾乎都不是法律主張：圈號「①②③」經 NFKC 會變成 1、2、3，
+       「兩個可以一起用」的「兩」「一」也會被撿進來。拿這些去比對法條，
+       報表會被「散文的『1』不在所引條文中」這種廢話灌滿。
+    ★ 反過來說，散文裡真正的法律斷言幾乎必然帶單位
+      （十日、六十日、二倍、三十人、四十八小時），所以用「有沒有單位」
+      當過濾條件既簡單又站得住。
+    """
+    return {n for n in numbers_of(text) if not n.isdigit()}
+
+
 # ── 1. 抽出散文來源 ──────────────────────────────────────────────
 def extract_backend_prose():
     """從 answer_generator.py 以 AST 取出模組層級的字串常數（SYSTEM_PROMPT 等）。"""
