@@ -2,11 +2,11 @@
 from schemas.check import CheckRequest, CheckResult, ViolationItem, ComputedMetrics, LawReference
 from .attendance_parser import parse_attendance, ParsedAttendance
 from .labor_rules import ALL_RULES, ViolationResult
-from .wage_calculator import calc_shortfall_for_rule, calc_total_shortfall
+from .wage_calculator import calc_shortfall_range, calc_total_shortfall
 
 
 def _to_schema_violation(r: ViolationResult, att: ParsedAttendance, hourly: float) -> ViolationItem:
-    shortfall, formula = calc_shortfall_for_rule(r.rule_id, att, hourly) if hourly else (0, "")
+    shortfall, shortfall_max, formula = calc_shortfall_range(r.rule_id, att, hourly) if hourly else (0, 0, "")
     return ViolationItem(
         rule_id=r.rule_id,
         status=r.status,
@@ -17,7 +17,16 @@ def _to_schema_violation(r: ViolationResult, att: ParsedAttendance, hourly: floa
         missing_facts=r.missing_facts,
         estimated_shortfall_ntd=shortfall,
         shortfall_formula=formula,
+        estimated_shortfall_max_ntd=shortfall_max,
     )
+
+
+_SHORTFALL_BASIS = {
+    "none": "以「超時與休假日上班的時數完全沒拿到錢」計算。",
+    "base_only": "以「超時與休假日上班的時數有照原本時薪領，只是沒有加成」計算，只算少給的加成。",
+    "full": "你表示超時有另外領加班費，本站不另估金額；可用下方試算機核對有沒有給足。",
+    "unknown": "你不確定那些時數拿到了什麼：低標＝已照原本時薪領過（只少了加成），高標＝完全沒領到。請對照薪資單。",
+}
 
 
 def _risk_level(violations: list[ViolationResult]) -> str:
@@ -66,6 +75,7 @@ def evaluate(request: CheckRequest) -> CheckResult:
         holiday_compensation_overrides=request.holiday_compensation_overrides,
         agreed_rest_day_ot_dates=request.agreed_rest_day_ot_dates,
     )
+    att.ot_pay_status = request.ot_pay_status
 
     results: list[ViolationResult] = [rule(att) for rule in ALL_RULES]
     non_compliant = [r for r in results if r.status != "compliant"]
@@ -74,9 +84,9 @@ def evaluate(request: CheckRequest) -> CheckResult:
     hourly = request.hourly_wage_regular or 0
     violations = [_to_schema_violation(r, att, hourly) for r in results]
     # 只統計疑似違規/警告類的短少金額，compliant 跳過
-    total_shortfall = calc_total_shortfall([
-        v.model_dump() for v in violations if v.status != "compliant"
-    ]) if hourly else 0
+    counted = [v.model_dump() for v in violations if v.status != "compliant"]
+    total_shortfall = calc_total_shortfall(counted) if hourly else 0
+    total_shortfall_max = calc_total_shortfall(counted, key="estimated_shortfall_max_ntd") if hourly else 0
 
     return CheckResult(
         risk_level=risk,
@@ -93,5 +103,7 @@ def evaluate(request: CheckRequest) -> CheckResult:
         ),
         next_actions=_next_actions(risk, results),
         total_shortfall_ntd=total_shortfall,
+        total_shortfall_max_ntd=total_shortfall_max,
+        shortfall_basis=_SHORTFALL_BASIS[request.ot_pay_status] if hourly else "",
         has_wage_input=bool(hourly),
     )

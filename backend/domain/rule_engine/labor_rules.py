@@ -58,6 +58,16 @@ _OT_SNIPPET = (
 )
 _OT_ASK_AGREED = "雇主是否已經工會或勞資會議同意（30 人以上並報主管機關備查）？若有，月上限為 54 小時。"
 _OT_ASK_QUARTER = "每三個月合計是否超過 138 小時？（需三個月完整資料才能判斷）"
+# 以下兩段逐字抄自語料庫（2026-11），含但書，不得改寫
+_ART24_2 = (
+    "雇主使勞工於第三十六條所定休息日工作，工作時間在二小時以內者，"
+    "其工資按平日每小時工資額另再加給一又三分之一以上；"
+    "工作二小時後再繼續工作者，按平日每小時工資額另再加給一又三分之二以上。"
+)
+_ART40_1 = (
+    "因天災、事變或突發事件，雇主認有繼續工作之必要時，得停止第三十六條至第三十八條所定勞工之假期。"
+    "但停止假期之工資，應加倍發給，並應於事後補假休息。"
+)
 
 
 # ──────────────────────────────────────────────
@@ -84,7 +94,7 @@ def rule_daily_hours(att: ParsedAttendance) -> ViolationResult:
         title="單日工時超過 12 小時",
         explanation=(
             f"{worst.date.strftime('%m/%d')} 工時達 {hrs:.1f} 小時，超過勞基法第 32 條第 2 項"
-            "「延長勞工之工作時間**連同正常工作時間，一日不得超過十二小時**」之上限。"
+            "「延長勞工之工作時間連同正常工作時間，一日不得超過十二小時」之上限。"
         ),
         confidence="high" if len(violations) > 1 else "medium",
         law_references=[_ref("32", "延長工時限制（32 條 2 項）", _OT_SNIPPET)],
@@ -99,7 +109,7 @@ def rule_weekly_hours(att: ParsedAttendance) -> ViolationResult:
     LIMIT = 40 * 60
     over_weeks = []
     for week in att.weeks:
-        total = sum(d.work_minutes for d in week)
+        total = sum(d.total_minutes for d in week)  # 含打卡外加班
         if total > LIMIT:
             over_weeks.append(total)
     if not over_weeks:
@@ -154,6 +164,27 @@ def rule_consecutive_days(att: ParsedAttendance) -> ViolationResult:
 # ──────────────────────────────────────────────
 def rule_sunday_work(att: ParsedAttendance) -> ViolationResult:
     mandatory_days = [d for d in att.days if d.is_mandatory_rest]
+    if not mandatory_days and att.max_consecutive_days >= 7:
+        # ⛔ 2026-11 修正前：連上 12 天的人，這裡回「合規・可信度高」，
+        #    就排在「連續工作 12 天・疑似違規」旁邊。
+        #    連上 7 天以上代表其中必有應休的例假被拿來上班，只是無從判斷是哪一天。
+        return ViolationResult(
+            rule_id="sunday_work",
+            status="warning",
+            title="例假日出勤（無法判斷是哪一天）",
+            explanation=(
+                f"你連續上班 {att.max_consecutive_days} 天，期間至少有一天原本應該是例假，"
+                "但系統無法判斷是哪一天，所以這一項不估金額（見「連續工作」那一項）。"
+                "依勞基法第 40 條，例假只有天災、事變或突發事件才能停止，"
+                "停止時工資應加倍發給，並應於事後補假休息。"
+            ),
+            confidence="medium",
+            law_references=[
+                _ref("36", "例假規定", "勞工每七日中應有二日之休息，其中一日為例假，一日為休息日。"),
+                _ref("40", "例假出勤補償", _ART40_1),
+            ],
+            missing_facts=["公司排定的例假是哪一天？", "是否屬天災、事變等緊急情況？", "加倍工資與補假是否已給？"],
+        )
     if not mandatory_days:
         # 判斷設定的例假日是哪天
         sample = next(iter(att.days), None)
@@ -191,8 +222,53 @@ def rule_sunday_work(att: ParsedAttendance) -> ViolationResult:
 # ──────────────────────────────────────────────
 # 規則 5：休息日出勤未加成計薪（依設定之休息日，非固定週六）→ 第 24 條
 # ──────────────────────────────────────────────
+_REST_DAY_36_1 = "勞工每七日中應有二日之休息，其中一日為例假，一日為休息日。"
+_REST_DAY_ASK_FLEX = "公司是否依法採用變形工時（須經工會或勞資會議同意，且限指定行業）？若有，可以兩週合計休 4 天，不一定每週都要休 2 天。"
+
+
+def _implied_rest_day_result(att: ParsedAttendance) -> ViolationResult:
+    """一週上班 ≥ 6 天：其中 1 天依法是休息日（推定），提醒而不逕判違規"""
+    implied = att.implied_rest_days
+    eg = "、".join(d.date.strftime("%m/%d") for d in implied[:4])
+    more = "等" if len(implied) > 4 else ""
+    return ViolationResult(
+        rule_id="saturday_pay",
+        status="warning",
+        title=f"一週上班 6 天以上（{len(implied)} 次）：其中 1 天依法是休息日",
+        explanation=(
+            f"你的出勤中有 {len(implied)} 個「7 天內上班 6 天以上」的區間。"
+            f"依勞基法第 36 條第 1 項「{_REST_DAY_36_1.rstrip('。')}」，"
+            "所以這 6 天裡有 1 天其實是休息日——那一天的工資要依第 24 條第 2 項的休息日倍率計算。"
+            "（確定是休息日之後，當天工時還要算進每月加班上限〔第 36 條第 3 項〕；"
+            "在確認之前，本站的月加班先不算進去。）"
+            f"是哪一天由公司排定，系統先用每段工時最短的一天估算（{eg}{more}），金額只會少算、不會多算。"
+            "⚠️ 若公司依法採用變形工時，可以兩週合計休 4 天，就不一定違法——請先確認。"
+        ),
+        confidence="medium",
+        law_references=[
+            _ref("36", "例假與休息日", _REST_DAY_36_1),
+            _ref("24", "休息日工資（24 條 2 項）", _ART24_2),
+        ],
+        missing_facts=[_REST_DAY_ASK_FLEX, "公司排定的休息日是哪一天？那天有沒有照休息日倍率給薪？"],
+    )
+
+
 def rule_saturday_pay(att: ParsedAttendance) -> ViolationResult:
     regular_days = [d for d in att.days if d.is_regular_rest and d.work_minutes > 0]
+    if not regular_days and att.implied_rest_days:
+        # ⛔ 2026-11 修正前：時薪工一週上 6 天，這裡回「無休息日出勤紀錄・合規・可信度高」。
+        #    前端只會把「沒上班的日子」標成休息日，上 6 天時休息日永遠找不到。
+        return _implied_rest_day_result(att)
+    result = _explicit_rest_day_result(att, regular_days)
+    if att.implied_rest_days and regular_days:
+        extra = _implied_rest_day_result(att)
+        result.explanation += " 另外：" + extra.explanation
+        result.missing_facts = result.missing_facts + [_REST_DAY_ASK_FLEX]
+        result.law_references = result.law_references + extra.law_references[:1]
+    return result
+
+
+def _explicit_rest_day_result(att: ParsedAttendance, regular_days: list[DayWork]) -> ViolationResult:
     if not regular_days:
         return ViolationResult(
             rule_id="saturday_pay",
@@ -270,6 +346,8 @@ def rule_monthly_overtime(att: ParsedAttendance) -> ViolationResult:
     hrs = projected // 60
     ref = [_ref("32", "月延長工時上限（含但書）", _OT_SNIPPET)]
     partial = ["需完整一個月資料才能精確判斷"] if days_count < 20 else []
+    # 依打卡時間推算，不再只看「加班（分）」欄位（見 DayWork.extended_minutes）
+    basis = "（依打卡時間推算：平日超過 8 小時的部分＋休息日工時）"
 
     # ① 未達 46 小時：合規
     if projected <= _OT_LIMIT_BASE:
@@ -278,7 +356,7 @@ def rule_monthly_overtime(att: ParsedAttendance) -> ViolationResult:
             status="compliant",
             title="月加班時數",
             explanation=(
-                f"依現有資料（{days_count} 天）推估月加班時數約 {hrs} 小時，"
+                f"依現有資料（{days_count} 天）推估月加班時數約 {hrs} 小時{basis}，"
                 "未超過勞基法第 32 條第 2 項本文之 46 小時上限。"
             ),
             confidence=conf,
@@ -293,8 +371,8 @@ def rule_monthly_overtime(att: ParsedAttendance) -> ViolationResult:
             status="warning",
             title=f"月加班時數約 {hrs} 小時，已超過 46 小時（是否違法取決於有無工會／勞資會議同意）",
             explanation=(
-                f"依出勤紀錄推估月加班時數約 {hrs} 小時，已超過勞基法第 32 條第 2 項"
-                "本文之 46 小時上限。**惟同項但書規定**，雇主經工會同意（無工會者經勞資會議同意）後，"
+                f"依出勤紀錄推估月加班時數約 {hrs} 小時{basis}，已超過勞基法第 32 條第 2 項"
+                "本文之 46 小時上限。惟同項但書規定，雇主經工會同意（無工會者經勞資會議同意）後，"
                 "月上限為 54 小時、每三個月 138 小時；僱用 30 人以上者並應報當地主管機關備查。"
                 "因此本項是否違法，取決於雇主有無取得該同意並依規定報備——建議先向雇主或工會確認。"
             ),
@@ -309,8 +387,8 @@ def rule_monthly_overtime(att: ParsedAttendance) -> ViolationResult:
         status="suspected_violation",
         title=f"月加班時數超過 54 小時（約 {hrs} 小時）",
         explanation=(
-            f"依出勤紀錄推估月加班時數約 {hrs} 小時，"
-            "**縱使雇主已經工會或勞資會議同意，仍超過勞基法第 32 條第 2 項但書之 54 小時上限**。"
+            f"依出勤紀錄推估月加班時數約 {hrs} 小時{basis}，"
+            "縱使雇主已經工會或勞資會議同意，仍超過勞基法第 32 條第 2 項但書之 54 小時上限。"
             "（未取得該同意者，本文上限為 46 小時，超過更多。）"
         ),
         confidence=conf,
@@ -325,32 +403,72 @@ def rule_monthly_overtime(att: ParsedAttendance) -> ViolationResult:
 # ──────────────────────────────────────────────
 # 規則 7：疑似無薪加班 → 第 22、24 條
 # ──────────────────────────────────────────────
-def rule_unpaid_overtime(att: ParsedAttendance) -> ViolationResult:
-    suspects = [
+def _ot_days(att: ParsedAttendance) -> list[DayWork]:
+    """平日（非例假／休息日／推定休息日／國定假日）工時超過 8 小時的日子"""
+    return [
         d for d in att.days
-        if d.work_minutes > 8 * 60 and d.overtime_minutes == 0
+        if not d.is_any_rest_day and not d.is_national_holiday and d.total_minutes > 8 * 60
+    ]
+
+
+def rule_unpaid_overtime(att: ParsedAttendance) -> ViolationResult:
+    # ⛔ 2026-11 修正前：以「加班（分）欄位 == 0」當作「沒記錄加班」的證據。
+    #    但同一欄位在別處又被當成「打卡外另外加的時數」——語意互相矛盾，
+    #    而且幾乎沒人知道那欄要填什麼。改為直接問勞工「超時的錢拿到了什麼」。
+    suspects = _ot_days(att)
+    refs = [
+        _ref("22", "工資全額給付", "工資應全額直接給付勞工。"),
+        _ref("24", "加班費計算", "延長工作時間，其延長之工時依規定加給工資。"),
     ]
     if not suspects:
         return ViolationResult(
             rule_id="unpaid_overtime",
             status="compliant",
-            title="無薪加班跡象",
-            explanation="未發現明顯的無薪加班跡象。",
+            title="平日加班費",
+            explanation="平日沒有超過 8 小時的出勤。",
             confidence="medium",
             law_references=[_ref("22", "工資給付", "工資應全額直接給付勞工。")],
             missing_facts=[],
         )
-    pct = len(suspects) / max(len(att.days), 1) * 100
+    n = len(suspects)
+    pay = att.ot_pay_status
+    if pay == "full":
+        return ViolationResult(
+            rule_id="unpaid_overtime",
+            status="compliant",
+            title=f"平日加班（{n} 天）：你表示有另外領加班費",
+            explanation=(
+                f"有 {n} 天工時超過 8 小時。你表示這些時數有另外領到加班費，"
+                "可用下方試算機核對倍率是否足額（前 2 小時至少 1.34 倍、再 2 小時至少 1.67 倍）。"
+            ),
+            confidence="medium",
+            law_references=refs,
+            missing_facts=["加班費是否依倍率給足？"],
+        )
+    if pay in ("none", "base_only"):
+        what = "完全沒拿到錢" if pay == "none" else "只照原本時薪算、沒有加成"
+        return ViolationResult(
+            rule_id="unpaid_overtime",
+            status="suspected_violation",
+            title=f"平日加班沒給足（{n} 天）",
+            explanation=(
+                f"有 {n} 天工時超過 8 小時，你表示超時的部分{what}。"
+                "依勞基法第 24 條，延長工時的工資應依倍率加給；依第 22 條，工資應全額直接給付。"
+            ),
+            confidence="medium",
+            law_references=refs,
+            missing_facts=["公司是否有「責任制」約定？（大部分行業不適用）"],
+        )
     return ViolationResult(
         rule_id="unpaid_overtime",
-        status="warning" if pct < 50 else "suspected_violation",
-        title=f"疑似無薪加班（{len(suspects)} 天）",
-        explanation=f"有 {len(suspects)} 天工時超過 8 小時，但加班紀錄為 0，疑似未記錄加班時數。依勞基法第 22 條，工資應全額給付，未記錄的加班時數應補發加班費。",
+        status="warning",
+        title=f"工時超過 8 小時（{n} 天）：請確認有沒有領到加班費",
+        explanation=(
+            f"有 {n} 天工時超過 8 小時，超過的部分是加班。"
+            "依勞基法第 24 條，延長工時的工資應依倍率加給。請對照薪資單，確認這些時數有沒有領到錢、有沒有加成。"
+        ),
         confidence="medium",
-        law_references=[
-            _ref("22", "工資全額給付", "工資應全額直接給付勞工。"),
-            _ref("24", "加班費計算", "延長工作時間，其延長之工時依規定加給工資。"),
-        ],
+        law_references=refs,
         missing_facts=["超時工作是否有對應加班費？", "公司是否有「責任制」約定？（大部分行業不適用）"],
     )
 
@@ -408,7 +526,7 @@ def rule_min_rest_hours(att: ParsedAttendance) -> ViolationResult:
             explanation=(
                 f"以下日期上班前休息時間不足 11 小時：{dates_str}。"
                 "依勞動基準法第 34 條第 2 項本文，輪班制勞工更換班次時應有連續 11 小時休息；"
-                "**惟同項但書規定**，經中央目的事業主管機關商請中央主管機關公告之行業，"
+                "惟同項但書規定，經中央目的事業主管機關商請中央主管機關公告之行業，"
                 "得縮短為不少於連續 8 小時（並須經工會或勞資會議同意）。"
                 "因所餘時間仍達 8 小時以上，是否違法取決於雇主是否屬該公告行業並已取得同意。"
             ),
@@ -424,8 +542,8 @@ def rule_min_rest_hours(att: ParsedAttendance) -> ViolationResult:
         title=f"班次間休息不足 8 小時（{len(below_min)} 次，最短 {rest_hrs:.1f} 小時）",
         explanation=(
             f"以下日期上班前休息時間不足 11 小時：{dates_str}，最短僅 {rest_hrs:.1f} 小時。"
-            "**縱使雇主屬經公告得適用但書之行業，仍低於勞動基準法第 34 條第 2 項但書"
-            "所定「不少於連續八小時」之下限。**"
+            "縱使雇主屬經公告得適用但書之行業，仍低於勞動基準法第 34 條第 2 項但書"
+            "所定「不少於連續八小時」之下限。"
         ),
         confidence="high" if len(below_min) > 1 else "medium",
         law_references=ref,
@@ -477,10 +595,12 @@ def rule_national_holiday(att: ParsedAttendance) -> ViolationResult:
             else:
                 detail_parts.append(f"{date_str}（{name}）")
         names = "、".join(detail_parts)
+        # ⛔ 2026-11 修正前：這裡寫「每小時均以雙倍計算」，金額卻以「最低 8 小時」計，
+        #    4 小時的班被多算一倍。「最低 8 小時」在 repo 內找不到任何出處 → 依鐵則不採。
         issues.append(
             f"在國定假日出勤：{names}。"
-            f"依勞基法第 39 條，國定假日出勤應加倍給付工資（每一工作小時 × 2）；"
-            f"補假日的法律性質等同原國定假日，時薪制勞工不論工作時數長短，每小時均以雙倍計算。"
+            f"依勞基法第 39 條，雇主經徵得勞工同意於休假日工作者，工資應加倍發給；"
+            f"補假日的法律性質等同原國定假日。本站以你實際工作的時數估算（保守算法）。"
         )
         refs.append(_ref("39", "假日工資加倍", "勞工於休假日工作，工資應加倍發給。"))
 
@@ -509,11 +629,17 @@ def rule_national_holiday(att: ParsedAttendance) -> ViolationResult:
         )
         refs.append(_ref("39", "假日工資加倍", "勞工於休假日工作，工資應加倍發給。"))
 
-    has_violation = bool(worked_on_holiday or mandatory_on_holiday)
+    # 國定假日上班本身合法（經勞工同意即可），違法的是「沒加倍」。
+    # ⛔ 2026-11 修正前不問有沒有加倍就標「疑似違規・可信度高」，
+    #    卻又把「是否已獲得加倍工資？」列在尚需確認——自相矛盾。
+    pay_known_short = att.ot_pay_status in ("none", "base_only")
+    has_violation = bool(mandatory_on_holiday or (worked_on_holiday and pay_known_short))
     status = "suspected_violation" if has_violation else "warning"
     # 標題依情境調整，讓使用者快速辨識
-    if worked_on_holiday:
+    if worked_on_holiday and pay_known_short:
         title = "國定假日出勤未加倍給薪"
+    elif worked_on_holiday:
+        title = f"國定假日出勤（共 {len(worked_on_holiday)} 天）：請確認有沒有加倍給薪"
     elif mandatory_on_holiday:
         title = "例假日與國定假日重疊（仍出勤）"
     else:
@@ -524,7 +650,7 @@ def rule_national_holiday(att: ParsedAttendance) -> ViolationResult:
         status=status,
         title=title,
         explanation=" ".join(issues),
-        confidence="high",
+        confidence="high" if has_violation else "medium",
         law_references=refs,
         missing_facts=[
             "國定假日出勤是否已獲得加倍工資？",

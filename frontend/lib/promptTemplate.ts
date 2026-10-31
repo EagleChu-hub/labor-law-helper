@@ -95,15 +95,18 @@ export function buildResultPrompt(result: CheckResult): string {
   }
 
   const issueLines = issues.map((v) => {
-    const money = (v.estimated_shortfall_ntd ?? 0) > 0
-      ? `（試算短少 NT$ ${v.estimated_shortfall_ntd!.toLocaleString()}）`
+    const lo = v.estimated_shortfall_ntd ?? 0;
+    const hi = v.estimated_shortfall_max_ntd ?? 0;
+    const money = lo > 0
+      ? `（試算短少 NT$ ${hi > lo ? `${lo.toLocaleString()}～${hi.toLocaleString()}` : lo.toLocaleString()}）`
       : "";
     return `- ${v.title}${money}：${v.explanation}`;
   }).join("\n");
 
   const total = result.total_shortfall_ntd ?? 0;
+  const totalMax = result.total_shortfall_max_ntd ?? 0;
   const totalLine = total > 0
-    ? `\n系統試算我這段期間可能少領 NT$ ${total.toLocaleString()} 元。`
+    ? `\n系統試算我這段期間可能少領 NT$ ${totalMax > total ? `${total.toLocaleString()}～${totalMax.toLocaleString()}` : total.toLocaleString()} 元（${result.shortfall_basis ?? ""}）。`
     : "";
 
   return `${SYSTEM_INSTRUCTION}

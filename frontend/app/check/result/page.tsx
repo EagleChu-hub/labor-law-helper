@@ -32,8 +32,10 @@ function buildAskUrl(result: CheckResult): string {
   }
 
   const issueList = issues.map((t) => `「${t}」`).join("、");
-  const moneyLine = (result.total_shortfall_ntd ?? 0) > 0
-    ? `系統估算我可能少領 NT$ ${result.total_shortfall_ntd?.toLocaleString()} 元。`
+  const low = result.total_shortfall_ntd ?? 0;
+  const high = result.total_shortfall_max_ntd ?? 0;
+  const moneyLine = low > 0 || high > 0
+    ? `系統估算我可能少領 NT$ ${high > low ? `${low.toLocaleString()}～${high.toLocaleString()}` : low.toLocaleString()} 元（${result.shortfall_basis ?? ""}）。`
     : "";
   const msg = `我剛做了出勤快速判斷，系統發現以下疑似問題：${issueList}。${moneyLine}請根據勞基法幫我詳細分析這些情況，並告訴我應該如何主張自己的權益？`;
   return "/ask?q=" + encodeURIComponent(msg);
@@ -203,20 +205,33 @@ export default function CheckResultPage() {
 
   const violationCount = result.violations.filter((v) => v.status !== "compliant").length;
   const totalShortfall = result.total_shortfall_ntd ?? 0;
+  // 不確定那些時數拿到什麼時，後端回一個區間：低標＝照時薪領過、高標＝完全沒領到
+  const totalShortfallMax = Math.max(result.total_shortfall_max_ntd ?? 0, totalShortfall);
+  const hasRange = totalShortfallMax > totalShortfall;
   const hasWage = !!result.has_wage_input;
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       {/* ⭐ 最顯眼：少領金額紅卡 */}
       {violationCount > 0 && (
-        hasWage && totalShortfall > 0 ? (
+        hasWage && totalShortfallMax > 0 ? (
           <div className="relative overflow-hidden bg-gradient-to-br from-danger-deep to-danger text-white rounded-[20px] shadow-[0_20px_44px_-24px_rgba(168,58,54,.5)] p-7 space-y-1.5">
             <Coins size={60} strokeWidth={1.4} className="absolute right-6 top-6 opacity-[0.28]" />
             <p className="relative text-[15px] font-semibold text-white/86">你這段期間可能少領</p>
             <p className="relative font-sora font-bold text-4xl sm:text-5xl leading-tight tracking-tight">
               <span className="text-gold text-xl sm:text-2xl font-semibold align-middle mr-1.5">NT$</span>
               {Math.round(totalShortfall).toLocaleString()}
+              {hasRange && (
+                <span className="text-2xl sm:text-3xl"> ～ {Math.round(totalShortfallMax).toLocaleString()}</span>
+              )}
             </p>
+            {/* 2026-11：金額的前提一定要講——原本一律假設「完全沒領到」卻沒說，
+                勞工拿著高估的數字去談，會被薪資單打臉 */}
+            {result.shortfall_basis && (
+              <p className="relative text-[13.5px] text-white leading-relaxed max-w-md pt-1 font-semibold">
+                {result.shortfall_basis}
+              </p>
+            )}
             <p className="relative text-[13.5px] text-white/80 leading-relaxed max-w-md pt-1">
               依勞基法第 24、39 條倍率試算。點下方違規卡片看每項明細，或捲到最底用試算機自己調參數重算。
             </p>

@@ -7,6 +7,15 @@ import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
 import type { AttendanceRecord, CheckRequest } from "@/types";
 
 const STEPS = ["雇用類型", "出勤紀錄", "確認送出"];
+const PRESET_WEEKS = 4;  // 快選按鈕只套用到最近幾週（到今天為止）
+
+/** 超時與休假日上班的時數，勞工拿到了什麼（決定少領金額怎麼算） */
+const OT_PAY_OPTIONS: { value: NonNullable<CheckRequest["ot_pay_status"]>; label: string }[] = [
+  { value: "unknown",   label: "不確定" },
+  { value: "base_only", label: "有照原本時薪算，但沒有多給" },
+  { value: "none",      label: "完全沒拿到錢" },
+  { value: "full",      label: "有另外領加班費（有多給）" },
+];
 const WEEKDAY_HEADER = ["一", "二", "三", "四", "五", "六", "日"];
 const WEEKDAY_ZH = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"];
 
@@ -178,6 +187,7 @@ export default function CheckPage() {
   // 時薪（選填，用於試算短少金額）
   const [hourlyRegular, setHourlyRegular] = useState<string>("");
   const [hourlyHoliday, setHourlyHoliday] = useState<string>("");
+  const [otPayStatus, setOtPayStatus] = useState<NonNullable<CheckRequest["ot_pay_status"]>>("unknown");
   // 約定休息日加班：使用者明確標記「這天是與雇主約定的合法休息日加班」
   const [agreedOtDates, setAgreedOtDates] = useState<Set<string>>(new Set());
 
@@ -241,10 +251,20 @@ export default function CheckPage() {
     });
   }
 
+  // ⛔ 2026-11 修正前：快選套用到整個日曆（過去 3 個月 + 未來 1 個月），
+  //    一按就選了 102 天，其中 24 天是還沒發生的未來，結果頁拿這 102 天去算。
+  //    快選只套用到「最近 4 週（到今天為止）」；未來日期仍可手動點選（預先檢查排班）。
+  const presetStartStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - (PRESET_WEEKS * 7 - 1));
+    return toLocalDateStr(d);
+  }, []);
+
   function selectWeekdays(jsDays: number[]) {
     setSelectedDates((prev) => {
       const next = new Set(prev);
       allDates.forEach((d) => {
+        if (d < presetStartStr || d > todayStr) return;
         if (jsDays.includes(parseLocalDate(d).getDay())) next.add(d);
       });
       return next;
@@ -306,6 +326,7 @@ export default function CheckPage() {
       holiday_compensation_overrides: holidayOverrides,
       hourly_wage_regular: hourlyRegular ? Number(hourlyRegular) : undefined,
       hourly_wage_holiday: hourlyHoliday ? Number(hourlyHoliday) : undefined,
+      ot_pay_status: otPayStatus,
     };
     sessionStorage.setItem("checkRequest", JSON.stringify(body));
     router.push("/check/result");
@@ -394,6 +415,24 @@ export default function CheckPage() {
                   placeholder="留空 = 用法定倍率推算"
                   className="w-full mt-1.5 border border-gold-border rounded-[11px] px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gold"
                 />
+              </div>
+            </div>
+            {/* 2026-11：金額要算對，必須先知道那些時數拿到了什麼——
+                原本一律假設「完全沒領到」，時薪工的金額會多算一倍以上 */}
+            <div>
+              <p className="text-[13px] font-bold text-ink">超過 8 小時、或在休假日上班的那些時數，你拿到的錢是？</p>
+              <p className="text-[12px] text-gold-deep mt-0.5">看薪資單就知道。不確定也沒關係，會給你一個範圍。</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                {OT_PAY_OPTIONS.map((o) => (
+                  <label key={o.value}
+                    className={`flex items-center gap-2 rounded-[11px] border px-3 py-2 text-[13.5px] cursor-pointer bg-white ${otPayStatus === o.value ? "border-navy ring-1 ring-navy text-ink font-semibold" : "border-gold-border text-ink"}`}>
+                    <input type="radio" name="ot_pay_status" value={o.value}
+                      checked={otPayStatus === o.value}
+                      onChange={() => setOtPayStatus(o.value)}
+                      className="accent-navy" />
+                    {o.label}
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -488,7 +527,8 @@ export default function CheckPage() {
               <p className="text-xs text-muted mt-0.5">未點選 = 休息日；系統自動判定例假日與休息日，不需手動設定</p>
             </div>
 
-            {/* Quick-select buttons */}
+            {/* Quick-select buttons：只套用到最近 4 週（到今天為止） */}
+            <p className="text-xs text-muted">快速選取（套用到最近 {PRESET_WEEKS} 週，不含未來）：</p>
             <div className="flex flex-wrap gap-2">
               <button onClick={() => selectWeekdays([1, 2, 3, 4, 5])}
                 className="text-xs bg-navy-50 border border-navy-100 text-navy-600 font-semibold rounded-full px-3 py-1 hover:bg-navy-100">
@@ -702,7 +742,7 @@ export default function CheckPage() {
                 { key: "clock_in",         label: "上班時間", type: "time"   },
                 { key: "clock_out",        label: "下班時間", type: "time"   },
                 { key: "break_minutes",    label: "休息（分）", type: "number" },
-                { key: "overtime_minutes", label: "加班（分）", type: "number" },
+                { key: "overtime_minutes", label: "打卡外加班（分）", type: "number" },
               ] as const).map(({ key, label, type }) => (
                 <div key={key}>
                   <label className="text-xs text-muted">{label}</label>
@@ -715,6 +755,10 @@ export default function CheckPage() {
                 </div>
               ))}
             </div>
+            <p className="text-xs text-muted">
+              打卡時間內超過 8 小時的部分，系統會自己算成加班，不用另外填。
+              「打卡外加班」只填打卡以外另外做的時間（例如下班打卡後繼續做、帶回家做）；沒有就填 0。
+            </p>
           </div>
 
           {/* Per-day overrides */}
@@ -773,7 +817,7 @@ export default function CheckPage() {
                               { key: "clock_in",         label: "上班", type: "time"   },
                               { key: "clock_out",        label: "下班", type: "time"   },
                               { key: "break_minutes",    label: "休息（分）", type: "number" },
-                              { key: "overtime_minutes", label: "加班（分）", type: "number" },
+                              { key: "overtime_minutes", label: "打卡外加班（分）", type: "number" },
                             ] as const).map(({ key, label, type }) => (
                               <div key={key}>
                                 <label className="text-xs text-muted">{label}</label>

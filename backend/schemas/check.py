@@ -44,6 +44,9 @@ class CheckRequest(BaseModel):
     # 時薪資訊（選填）：用於試算可能短少的加班費／假日工資
     hourly_wage_regular: Optional[float] = None  # 平日時薪
     hourly_wage_holiday: Optional[float] = None  # 假日時薪（留空則用平日 × 法定倍率）
+    # 超過 8 小時、或休假日上班的那些時數，勞工拿到了什麼（決定少領金額怎麼算）：
+    # none 完全沒拿到｜base_only 照原本時薪、沒加成｜full 有另外領加班費｜unknown 不確定
+    ot_pay_status: Literal["none", "base_only", "full", "unknown"] = "unknown"
 
 
 class LawReference(BaseModel):
@@ -64,6 +67,8 @@ class ViolationItem(BaseModel):
     # 試算可能短少金額（新台幣元）。未填時薪則為 0。
     estimated_shortfall_ntd: int = 0
     shortfall_formula: str = ""  # 公式說明，方便使用者理解
+    # 「不確定有沒有領到」時的高標（完全沒領到）；等於 estimated_shortfall_ntd 代表沒有區間
+    estimated_shortfall_max_ntd: int = 0
 
 
 class ComputedMetrics(BaseModel):
@@ -82,5 +87,8 @@ class CheckResult(BaseModel):
     next_actions: list[str]
     # 試算總短少金額（已去重，避免加班費類項目互相加總）
     total_shortfall_ntd: int = 0
+    total_shortfall_max_ntd: int = 0
+    # 金額是在什麼前提下算的（給勞工看，避免拿著高估的數字去談）
+    shortfall_basis: str = ""
     # 是否有提供時薪（決定前端顯示金額 or 「請輸入時薪」）
     has_wage_input: bool = False

@@ -65,7 +65,11 @@ export function ViolationCard({ violation }: Props) {
             <p className="flex items-center gap-2 text-sm font-extrabold text-gold-deep">
               <Coins size={17} strokeWidth={1.9} />
               試算可能短少：
-              <span className="font-sora">NT$ {violation.estimated_shortfall_ntd!.toLocaleString()}</span>
+              <span className="font-sora">
+                NT$ {violation.estimated_shortfall_ntd!.toLocaleString()}
+                {(violation.estimated_shortfall_max_ntd ?? 0) > violation.estimated_shortfall_ntd! &&
+                  ` ～ ${violation.estimated_shortfall_max_ntd!.toLocaleString()}`}
+              </span>
             </p>
             {violation.shortfall_formula && (
               <p className="text-xs text-muted font-sora ml-6">公式：{violation.shortfall_formula}</p>

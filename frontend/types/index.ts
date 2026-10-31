@@ -48,6 +48,8 @@ export interface CheckRequest {
   hourly_wage_holiday?: number;
   /** 使用者明確標記「與雇主約定的休息日加班」日期 */
   agreed_rest_day_ot_dates?: string[];
+  /** 超過 8 小時／休假日上班的時數拿到了什麼：none 完全沒拿到｜base_only 照時薪沒加成｜full 有另外領｜unknown */
+  ot_pay_status?: "none" | "base_only" | "full" | "unknown";
 }
 
 export interface LawReference {
@@ -68,6 +70,8 @@ export interface ViolationItem {
   missing_facts: string[];
   estimated_shortfall_ntd?: number;
   shortfall_formula?: string;
+  /** 不確定有沒有領到時的高標（完全沒領到）；大於 estimated_shortfall_ntd 才是區間 */
+  estimated_shortfall_max_ntd?: number;
 }
 
 export interface ComputedMetrics {
@@ -85,6 +89,9 @@ export interface CheckResult {
   metrics: ComputedMetrics;
   next_actions: string[];
   total_shortfall_ntd?: number;
+  total_shortfall_max_ntd?: number;
+  /** 金額是在什麼前提下算的 */
+  shortfall_basis?: string;
   has_wage_input?: boolean;
 }
 

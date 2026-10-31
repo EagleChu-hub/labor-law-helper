@@ -18,6 +18,9 @@ class DayWork:
     clock_out_minutes: int      # 自午夜起分鐘（跨夜可 > 1440）
     rest_minutes_before: int = 0  # 距前一個出勤日下班的休息分鐘數（0 = 無前一天或不連續）
     is_agreed_rest_day_ot: bool = False  # 是否為使用者明確標記「與雇主約定的休息日加班」
+    # 推定休息日出勤：某 7 日內上班 ≥ 6 天，依第 36 條第 1 項其中必有 1 天是休息日。
+    # 雇主才決定是哪一天，故取該 7 日內工時最短的一天估算（寧可少估）。
+    is_implied_rest_day: bool = False
 
     # 相容舊介面（規則引擎用）
     @property
@@ -35,6 +38,30 @@ class DayWork:
     @property
     def is_national_holiday(self) -> bool:
         return bool(self.national_holiday_name)
+
+    @property
+    def is_any_rest_day(self) -> bool:
+        """例假、休息日（含推定）——這些日子的工時不是「平日」工時"""
+        return self.is_mandatory_rest or self.is_regular_rest or self.is_implied_rest_day
+
+    @property
+    def extended_minutes(self) -> int:
+        """
+        計入第 32 條第 2 項（月 46／54 小時）的延長工時。
+        ⛔ 2026-11 修正前只加總「加班（分）」欄位，打卡時間內的超時完全沒算
+           → 每天做 11 小時的人被判「月加班約 0 小時，合規」。
+        - 平日：超過 8 小時的部分（打卡時間 + 打卡外加班）
+        - 休息日：整天的工時（第 36 條第 3 項「雇主使勞工於休息日工作之時間，
+          計入第三十二條第二項所定延長工作時間總數」）
+        - 例假：不計入（例假出勤是另一個問題，由例假規則處理）
+        - 推定休息日：只算超過 8 小時的部分。推定可能被變形工時推翻，
+          不能拿推定去把月加班「升級」成違規（寧可少估）。
+        """
+        if self.is_mandatory_rest:
+            return 0
+        if self.is_regular_rest:
+            return self.total_minutes
+        return max(0, self.total_minutes - 8 * 60)
 
 
 @dataclass
@@ -54,6 +81,13 @@ class ParsedAttendance:
     weeks: list[list[DayWork]]
     # 出勤紀錄涵蓋期間內，例假/休息日撞國定假日的情況（含未出勤日）
     rest_holiday_collisions: list[RestHolidayCollision] = field(default_factory=list)
+    # 超時／休假日上班的時數，勞工拿到了什麼：
+    # "none" 完全沒拿到｜"base_only" 照原本時薪、沒加成｜"full" 有另外領加班費｜"unknown"
+    ot_pay_status: str = "unknown"
+
+    @property
+    def implied_rest_days(self) -> list[DayWork]:
+        return [d for d in self.days if d.is_implied_rest_day]
 
 
 def _parse_time(s: str) -> int:
@@ -94,6 +128,38 @@ def _group_weeks(days: list[DayWork]) -> list[list[DayWork]]:
         week_key = d.date.isocalendar()[1]
         week_map.setdefault(week_key, []).append(d)
     return list(week_map.values())
+
+
+def _mark_implied_rest_days(sorted_days: list[DayWork]) -> None:
+    """
+    第 36 條第 1 項：「勞工每七日中應有二日之休息，其中一日為例假，一日為休息日。」
+    → 任何 7 日內上班 ≥ 6 天，其中必有 1 天是休息日出勤。
+
+    前端的偵測只會把「沒上班的日子」標成例假／休息日，所以一週上 6 天時
+    休息日永遠找不到，休息日規則一律回「合規」（2026-11 線上實測發現）。
+
+    作法：由最早的出勤日開始，取不重疊的 7 日視窗（找到一個就跳 7 天），
+    每個視窗挑「工時最短」的一天標為推定休息日——是哪一天由雇主決定，
+    挑最短的那天估算金額最保守。
+    已含使用者標記的休息日／例假出勤的視窗略過（已由其他規則處理）。
+    未在紀錄中的日子一律視為沒上班（與前端「未點選＝休息日」一致），
+    只會讓上班天數變少，不會誤判。
+    """
+    worked = {d.date.date(): d for d in sorted_days}
+    next_allowed = None
+    for d in sorted_days:
+        start = d.date.date()
+        if next_allowed and start < next_allowed:
+            continue
+        window = [worked[start + timedelta(days=i)] for i in range(7)
+                  if start + timedelta(days=i) in worked]
+        if len(window) < 6:
+            continue
+        if any(w.is_regular_rest or w.is_mandatory_rest for w in window):
+            continue
+        pick = min(window, key=lambda w: (w.total_minutes, w.date))
+        pick.is_implied_rest_day = True
+        next_allowed = start + timedelta(days=7)
 
 
 def _effective_holiday(date_str: str, overrides: dict[str, str]) -> str:
@@ -173,6 +239,8 @@ def parse_attendance(
             rest = (24 * 60 - prev.clock_out_minutes) + curr.clock_in_minutes
             curr.rest_minutes_before = rest
 
+    _mark_implied_rest_days(sorted_days)
+
     # 掃描出勤期間內例假/休息日是否撞國定假日（含未出勤日）
     # 範圍：以出勤紀錄的首尾為界，並向兩側各延伸 1 天，
     # 以涵蓋「連續工作 6 天 → 邊界外的例假日（如 6/19、6/26）」這種情況。
@@ -212,7 +280,8 @@ def parse_attendance(
         days=sorted_days,
         max_consecutive_days=_max_consecutive(days),
         total_work_minutes=sum(d.work_minutes for d in days),
-        total_overtime_minutes=sum(d.overtime_minutes for d in days),
+        # 延長工時一律由 extended_minutes 推算（見其說明），不再只看「加班（分）」欄位
+        total_overtime_minutes=sum(d.extended_minutes for d in days),
         weeks=_group_weeks(days),
         rest_holiday_collisions=collisions,
     )

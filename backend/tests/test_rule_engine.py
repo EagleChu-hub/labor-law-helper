@@ -129,15 +129,31 @@ class TestMonthlyOvertimeProviso:
 
     def _month_with_ot(self, ot_hours_total: int):
         """造一個滿 20 天以上的月份，把加班時數平均攤到每一天（避開單日 >12h 的另一條規則）"""
-        mon = _monday(4)
-        days = 22
+        # ⚠️ 2026-11：原本是連續 22 天（含週六＝休息日）。第 36 條第 3 項規定休息日工時
+        #    計入月延長工時，修正後週六的 8 小時也會算進去，測不到原本要測的門檻 → 改為只排平日。
+        mon = _monday(5)
+        workdays = [mon + timedelta(days=i) for i in range(35) if (mon + timedelta(days=i)).weekday() < 5][:22]
+        days = len(workdays)
         per_day = ot_hours_total * 60 // days
         rest = ot_hours_total * 60 - per_day * days
         records = []
-        for i in range(days):
+        for i, d in enumerate(workdays):
             extra = per_day + (rest if i == 0 else 0)
-            records.append(_record(mon + timedelta(days=i), ot_min=extra))
+            records.append(_record(d, ot_min=extra))
         return evaluate(_request(records))
+
+    def test_休息日工時計入月加班(self):
+        """第 36 條第 3 項：「雇主使勞工於休息日工作之時間，計入第三十二條第二項所定延長工作時間總數。」"""
+        mon = _monday(5)
+        recs = []
+        for i in range(28):
+            d = mon + timedelta(days=i)
+            if d.weekday() == 6:
+                continue
+            recs.append(_record(d, clock_out="20:00"))      # 平日 10h → 每天 2h
+        r = evaluate(_request(recs))                        # 週六 fallback 為休息日：10h 全計
+        # 平日 20 天 × 2h + 週六 4 天 × 10h = 80h
+        assert r.metrics.total_overtime_minutes == 80 * 60
 
     def test_46h_以下為合規(self):
         result = self._month_with_ot(40)
@@ -162,7 +178,7 @@ class TestMonthlyOvertimeProviso:
         from domain.rule_engine.labor_rules import _OT_LIMIT_AGREED
         import inspect
         from domain.rule_engine import wage_calculator
-        src = inspect.getsource(wage_calculator.calc_shortfall_for_rule)
+        src = inspect.getsource(wage_calculator._gross_and_base)  # 2026-11 重構後門檻在這裡
         assert "_OT_LIMIT_AGREED" in src, "金額端應引用規則端常數，不得各自寫死數字"
         assert _OT_LIMIT_AGREED == 54 * 60
 
@@ -635,3 +651,135 @@ class TestProceduralSynonyms:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ──────────────────────────────────────────────
+# 2026-11 線上實測抓到的四個錯（用兩個角色在公開站實際操作）
+# 每個測試都重現當時的輸入；修正前會失敗。
+# ──────────────────────────────────────────────
+def _oct_weekdays(clock_in, clock_out, break_min):
+    """2026 年 10 月平日（扣掉 10/9 國慶補假），週日例假、週六休息日"""
+    recs, sat, sun = [], [], []
+    for d in range(1, 32):
+        day = date(2026, 10, d)
+        s = day.strftime("%Y-%m-%d")
+        if day.weekday() == 5:
+            sat.append(s); continue
+        if day.weekday() == 6:
+            sun.append(s); continue
+        if s == "2026-10-09":
+            continue
+        recs.append(_record(day, clock_in, clock_out, break_min))
+    return recs, sat, sun
+
+
+class TestLiveSiteFindings202611:
+
+    def test_月薪每天做11小時_月加班不得判0小時合規(self):
+        """阿明：21 天 × 每天實做 11 小時 = 63 小時延長工時。
+        修正前卡片寫「推估月加班時數約 0 小時…合規・可信度高」，同卡又算出少領 3,126。"""
+        recs, sat, sun = _oct_weekdays("09:00", "21:00", 60)
+        r = evaluate(CheckRequest(
+            employment_type="monthly_salary", attendance_records=recs,
+            mandatory_rest_dates=sun, regular_rest_dates=sat, hourly_wage_regular=208,
+        ))
+        assert r.metrics.total_overtime_minutes == 63 * 60, "「加班時數」必須由打卡時間推算"
+        v = next(v for v in r.violations if v.rule_id == "monthly_overtime")
+        assert v.status == "suspected_violation", "63 小時 > 54 小時，縱經同意亦超過但書上限"
+        assert "0 小時" not in v.explanation
+
+    def test_規則端與金額端不得矛盾(self):
+        """⛔ 同一張卡不得一邊說合規、一邊算出少領金額"""
+        for out in ("20:00", "21:00", "22:00"):              # 42h／63h／84h
+            recs, sat, sun = _oct_weekdays("09:00", out, 60)
+            r = evaluate(CheckRequest(
+                employment_type="monthly_salary", attendance_records=recs,
+                mandatory_rest_dates=sun, regular_rest_dates=sat, hourly_wage_regular=208,
+                ot_pay_status="none",
+            ))
+            for v in r.violations:
+                if v.status == "compliant":
+                    assert v.estimated_shortfall_ntd == 0, f"{out}：{v.rule_id} 判合規卻有少領金額"
+
+    def _part_timer_six_days(self, ot_pay_status="unknown"):
+        """時薪工：10 月每週一到週六各 4 小時，週日休"""
+        recs, sun = [], []
+        for d in range(5, 32):
+            day = date(2026, 10, d)
+            if day.weekday() == 6:
+                sun.append(day.strftime("%Y-%m-%d")); continue
+            recs.append(_record(day, "10:00", "14:00", 0))
+        return evaluate(CheckRequest(
+            employment_type="hourly", attendance_records=recs,
+            mandatory_rest_dates=sun, regular_rest_dates=[], hourly_wage_regular=196,
+            ot_pay_status=ot_pay_status,
+        ))
+
+    def test_一週上六天_休息日不得判合規(self):
+        """第 36 條第 1 項：每七日中應有二日之休息。上 6 天＝其中 1 天是休息日出勤。
+        修正前回「無休息日出勤紀錄・合規・可信度高」。"""
+        r = self._part_timer_six_days()
+        v = next(v for v in r.violations if v.rule_id == "saturday_pay")
+        assert v.status == "warning", "推定可能被變形工時推翻，只能提醒、不能逕判違規"
+        assert v.estimated_shortfall_ntd > 0
+        assert any("變形工時" in m for m in v.missing_facts), "必須主動問變形工時這個例外"
+
+    def test_推定休息日不得把月加班升級成違規(self):
+        """⛔ 寧可少估：推定休息日只算超過 8 小時的部分進月加班"""
+        r = self._part_timer_six_days()
+        v = next(v for v in r.violations if v.rule_id == "monthly_overtime")
+        assert v.status == "compliant"
+
+    def test_連上12天_例假日出勤不得判合規(self):
+        """小美：10/19～10/30 連上 12 天。修正前「例假日出勤：合規・可信度高」
+        就排在「連續工作 12 天・疑似違規」旁邊。"""
+        recs = [_record(date(2026, 10, 19) + timedelta(days=i), "10:00", "20:00", 30) for i in range(12)]
+        r = evaluate(CheckRequest(
+            employment_type="hourly", attendance_records=recs,
+            mandatory_rest_dates=["2026-10-17", "2026-10-18", "2026-10-31"],
+            regular_rest_dates=["2026-11-01"], hourly_wage_regular=196,
+        ))
+        v = next(v for v in r.violations if v.rule_id == "sunday_work")
+        assert v.status != "compliant"
+
+    def test_時薪工照時薪領過_只算加成(self):
+        """小美：修正前一律假設完全沒領到 → 10,870；照時薪領過時真正少的只有加成。"""
+        recs = [_record(date(2026, 10, 19) + timedelta(days=i), "10:00", "20:00", 30) for i in range(12)]
+        def run(status):
+            return evaluate(CheckRequest(
+                employment_type="hourly", attendance_records=recs,
+                mandatory_rest_dates=["2026-10-17", "2026-10-18", "2026-10-31"],
+                regular_rest_dates=["2026-11-01"], hourly_wage_regular=196, ot_pay_status=status,
+            ))
+        none, base, unknown, full = run("none"), run("base_only"), run("unknown"), run("full")
+        assert base.total_shortfall_ntd < none.total_shortfall_ntd
+        assert unknown.total_shortfall_ntd == base.total_shortfall_ntd, "不確定時主數字取低標"
+        assert unknown.total_shortfall_max_ntd == none.total_shortfall_ntd, "不確定時高標＝完全沒領到"
+        assert full.total_shortfall_ntd == 0
+        assert unknown.shortfall_basis, "必須告訴使用者金額是在什麼前提下算的"
+
+    def test_國定假日依實際工時_不得最低8小時(self):
+        """修正前：卡片寫「每小時均以雙倍計算」，金額卻用「最低 8 小時」——4 小時的班多算一倍。"""
+        recs = [_record(date(2026, 9, 25), "10:00", "14:00", 0),    # 中秋節
+                _record(date(2026, 10, 9), "10:00", "14:00", 0)]    # 國慶日（補假）
+        r = evaluate(CheckRequest(
+            employment_type="hourly", attendance_records=recs, hourly_wage_regular=196,
+            ot_pay_status="base_only",
+        ))
+        v = next(v for v in r.violations if v.rule_id == "national_holiday")
+        assert v.estimated_shortfall_ntd == 2 * 4 * 196, "照時薪領過 → 只少加倍的那一份（實際 4 小時）"
+        assert "最低 8" not in v.shortfall_formula
+
+    def test_國定假日未知是否加倍_不得標高可信度違規(self):
+        recs = [_record(date(2026, 9, 25), "10:00", "14:00", 0)]
+        r = evaluate(CheckRequest(employment_type="hourly", attendance_records=recs, hourly_wage_regular=196))
+        v = next(v for v in r.violations if v.rule_id == "national_holiday")
+        assert v.status == "warning"
+
+    def test_說明文字不得含markdown(self):
+        """ViolationCard 以純文字渲染 explanation，「**」會原樣印給勞工看（同 CLAUDE.md ㉒ 的坑）"""
+        import inspect
+        from domain.rule_engine import labor_rules
+        code = [ln for ln in inspect.getsource(labor_rules).splitlines() if not ln.strip().startswith("#")]
+        bad = [ln.strip() for ln in code if "**" in ln]
+        assert not bad, "規則說明含 markdown 粗體：%s" % bad[:3]

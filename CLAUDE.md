@@ -382,7 +382,7 @@ cd backend
 PYTHONIOENCODING=utf-8 python -m tools.check_law_snippets      # labor_rules.py 的 _ref()
 PYTHONIOENCODING=utf-8 python -m tools.check_frontend_statutes # triageTree.ts 的 STATUTES
 PYTHONIOENCODING=utf-8 python -m tools.check_prose_statutes    # 提示詞散文（PR18 新增）
-pytest tests/ -q                                               # 23 passed，含硬性迴歸鎖
+pytest tests/ -q                                               # 55 passed（PR23），含硬性迴歸鎖
 ```
 
 ⛔ **PROBLEM／ERROR 必須是 0**。三支都輸出報表而非 pass/fail（「改寫得恰不恰當」要人判斷），
@@ -729,6 +729,36 @@ PR22 把 `/triage` 的五條路線接上檢查，結果全部顯示 ✅。
 `court_mediation` 掛著 LIA38，但散文裡一個字都沒提到
 ——`check_frontend_statutes` 的「引用不足」檢查就是抓這個。
 **散文與宣告的法條會各自漂移。**
+
+---
+
+### ㉝ 同一個數字有三個出口（規則、金額、指標），必須同源
+
+PR23 前「延長工時」有三套算法：規則端只加總「加班（分）」欄位、金額端另算「欄位＋每日超過 8h」、
+指標「加班時數」又只看欄位。結果同一張卡寫「月加班約 0 小時・合規」，下面又算出少領 3,126。
+
+★ 現在一律走 `DayWork.extended_minutes`（平日超過 8h＋休息日整天，第 36 條第 3 項）
+與 `ParsedAttendance.total_overtime_minutes`。新增規則或金額時**不要自己再算一次**。
+⛔ 反向鎖：`test_規則端與金額端不得矛盾`——判合規的卡片，少領金額必須是 0。
+
+⚠️ 「打卡外加班（分）」欄位的語意是**打卡時間以外另外做的時間**（會加到當天工時上），
+不是「公司有記錄的加班」。有沒有領到錢改由 `ot_pay_status` 問勞工本人。
+
+---
+
+### ㉞ 金額一定要講前提；不知道的事實用區間，不要替勞工假設
+
+PR23 前金額一律假設「那些時數完全沒領到」，頁面卻沒說。時薪工每小時其實都有領時薪，
+10,870 裡真正少的只有約 4,206——拿著 1 萬多去談，會在調解時被薪資單打臉（＝對雇主含血噴人）。
+
+**作法**：`wage_calculator._gross_and_base()` 每項都算「應給總額 G」與「原本時薪部分 B」，
+依 `ot_pay_status` 決定 G、G−B 或區間〔G−B, G〕，並把前提（`shortfall_basis`）印在金額正下方。
+
+同理：**推定只能提醒，不能升級成違規**。一週上 6 天推定有 1 天是休息日（第 36 條第 1 項），
+但變形工時（第 36 條第 2 項）可能讓它合法 → 只給 warning、主動問變形工時，
+而且推定日**不**計入月加班（`test_推定休息日不得把月加班升級成違規`）。
+
+⛔ 找不到出處的數字（例如國定假日「最低 8 小時」）一律拿掉，改用保守算法。
 
 ---
 
