@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Coins, AlertTriangle, Clock, TrendingUp, CalendarDays, Gauge,
-  Calculator, MessageCircle, ChevronRight, Loader2,
+  Calculator, MessageCircle, ChevronRight, Loader2, Printer, Pencil,
 } from "lucide-react";
 import { RiskBadge } from "@/components/shared/RiskBadge";
 import { ViolationCard } from "@/components/results/ViolationCard";
@@ -44,6 +44,70 @@ function buildAskUrl(result: CheckResult): string {
 
 function formatNtd(n: number): string {
   return `NT$ ${Math.round(n).toLocaleString()}`;
+}
+
+const EMPLOYMENT_LABEL: Record<CheckRequest["employment_type"], string> = {
+  monthly_salary: "月薪制", hourly: "時薪制", dispatch: "派遣勞工",
+};
+const OT_PAY_LABEL: Record<string, string> = {
+  unknown: "不確定", base_only: "有照原本時薪算，但沒有多給",
+  none: "完全沒拿到錢", full: "有另外領加班費（有多給）",
+};
+const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
+
+function workedMinutes(r: CheckRequest["attendance_records"][number]): number {
+  const [ih, im] = r.clock_in.split(":").map(Number);
+  const [oh, om] = r.clock_out.split(":").map(Number);
+  let span = oh * 60 + om - (ih * 60 + im);
+  if (span < 0) span += 24 * 60;  // 跨夜
+  return Math.max(0, span - r.break_minutes) + (r.overtime_minutes || 0);
+}
+
+/**
+ * 你填的出勤資料。
+ * 2026-11：結果原本只存在分頁裡，關掉就沒了，也無法帶去勞工局或給家人看。
+ * 列印／存成 PDF 時要連「輸入」一起印，別人才看得出結果是根據什麼算的。
+ */
+function InputSummary({ req }: { req: CheckRequest }) {
+  const rows = [...req.attendance_records].sort((a, b) => a.date.localeCompare(b.date));
+  return (
+    <div className="space-y-2 text-sm">
+      <p className="text-ink">
+        {EMPLOYMENT_LABEL[req.employment_type]}
+        {req.hourly_wage_regular ? `・時薪 NT$ ${req.hourly_wage_regular}` : "・未填時薪"}
+        {`・超時與休假日上班的時數：${OT_PAY_LABEL[req.ot_pay_status ?? "unknown"]}`}
+        {`・共 ${rows.length} 天`}
+      </p>
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr className="text-muted border-b border-line">
+            <th className="text-left py-1 font-medium">日期</th>
+            <th className="text-left py-1 font-medium">上班</th>
+            <th className="text-left py-1 font-medium">下班</th>
+            <th className="text-right py-1 font-medium">休息</th>
+            <th className="text-right py-1 font-medium">打卡外加班</th>
+            <th className="text-right py-1 font-medium">工時</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const [y, m, d] = r.date.split("-").map(Number);
+            const wd = WEEKDAY[new Date(y, m - 1, d).getDay()];
+            return (
+              <tr key={r.date} className="border-b border-line/60">
+                <td className="py-1">{`${m}/${d}（${wd}）`}</td>
+                <td className="py-1 font-sora">{r.clock_in}</td>
+                <td className="py-1 font-sora">{r.clock_out}</td>
+                <td className="py-1 text-right">{r.break_minutes} 分</td>
+                <td className="py-1 text-right">{r.overtime_minutes ? `${r.overtime_minutes} 分` : "—"}</td>
+                <td className="py-1 text-right font-sora">{(workedMinutes(r) / 60).toFixed(1)} h</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** 加班費即時試算機（純前端） */
@@ -163,6 +227,7 @@ export default function CheckResultPage() {
   // C-3：Render 冷啟動提示 + 自動重試（最多 2 次，每次間隔 6 秒）
   const [retryCount, setRetryCount] = useState(0);
   const [coldStartMsg, setColdStartMsg] = useState(false);
+  const [request, setRequest] = useState<CheckRequest | null>(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("checkRequest");
@@ -171,6 +236,7 @@ export default function CheckResultPage() {
       return;
     }
     const request: CheckRequest = JSON.parse(raw);
+    setRequest(request);
     checkAnalyze(request)
       .then(setResult)
       .catch((e: Error) => {
@@ -186,7 +252,17 @@ export default function CheckResultPage() {
       });
   }, [retryCount]); // retryCount 改變時重新呼叫 API
 
-  if (error) return <ErrorState message={error} />;
+  if (error) return (
+    <div>
+      <ErrorState message={error} />
+      {/* 2026-11：原本這裡是死路，連回去的連結都沒有 */}
+      <div className="text-center">
+        <Link href="/check" className="inline-block px-5 py-2.5 bg-navy text-white rounded-xl text-sm font-bold hover:bg-navy-800">
+          去填出勤資料 →
+        </Link>
+      </div>
+    </div>
+  );
   if (!result) return (
     <div className="py-12 space-y-4">
       {coldStartMsg && (
@@ -214,6 +290,34 @@ export default function CheckResultPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
+      {/* 只在列印／存成 PDF 時出現：這份文件是什麼、什麼時候產生的 */}
+      <div className="hidden print:block border-b border-line pb-3">
+        <p className="text-lg font-black text-ink">勞基法小幫手｜出勤快速判斷結果</p>
+        <p className="text-xs text-muted">
+          產生時間：{new Date().toLocaleString("zh-TW", { hour12: false })}・https://labor-law-helper.vercel.app
+        </p>
+        <p className="text-xs text-muted">本結果為依你輸入的資料試算之參考資訊，不構成法律意見。</p>
+      </div>
+
+      {/* 保存與修改 */}
+      <div className="flex gap-2 print:hidden">
+        <button
+          onClick={() => window.print()}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-card border border-line rounded-xl text-sm font-bold text-navy-700 hover:bg-canvas"
+        >
+          <Printer size={16} /> 列印／存成 PDF
+        </button>
+        <Link
+          href="/check"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-card border border-line rounded-xl text-sm font-bold text-navy-700 hover:bg-canvas"
+        >
+          <Pencil size={16} /> 修改資料
+        </Link>
+      </div>
+      <p className="-mt-3 text-xs text-muted print:hidden">
+        結果只存在這個分頁，關掉就消失。要帶去勞工局或給家人看，請先「列印／存成 PDF」（手機請在列印畫面選「另存為 PDF」）。
+      </p>
+
       {/* ⭐ 最顯眼：少領金額紅卡 */}
       {violationCount > 0 && (
         hasWage && totalShortfallMax > 0 ? (
@@ -234,7 +338,7 @@ export default function CheckResultPage() {
                 {result.shortfall_basis}
               </p>
             )}
-            <p className="relative text-[13.5px] text-white/80 leading-relaxed max-w-md pt-1">
+            <p className="relative text-[13.5px] text-white/80 leading-relaxed max-w-md pt-1 print:hidden">
               依勞基法第 24、39 條倍率試算。點下方違規卡片看每項明細，或捲到最底用試算機自己調參數重算。
             </p>
           </div>
@@ -360,19 +464,33 @@ export default function CheckResultPage() {
       {violationCount > 0 && (
         <Link
           href="/triage"
-          className="flex items-center justify-center gap-2 border border-line bg-card rounded-xl py-4 text-[16px] font-bold text-navy-700 hover:bg-canvas transition"
+          className="print:hidden flex items-center justify-center gap-2 border border-line bg-card rounded-xl py-4 text-[16px] font-bold text-navy-700 hover:bg-canvas transition"
         >
           我該走哪條路？先幫我分流 →
         </Link>
       )}
 
+      {/* 你填的出勤資料：畫面上收合；列印時展開，讓文件看得出是根據什麼算的 */}
+      {request && (
+        <>
+          <details className="bg-card rounded-2xl border border-line p-4 print:hidden">
+            <summary className="cursor-pointer text-sm font-bold text-ink">你填的出勤資料（{request.attendance_records.length} 天）</summary>
+            <div className="mt-3"><InputSummary req={request} /></div>
+          </details>
+          <section className="hidden print:block space-y-2">
+            <h2 className="font-black text-ink">你填的出勤資料</h2>
+            <InputSummary req={request} />
+          </section>
+        </>
+      )}
+
       {/* 加班費試算機（純前端） */}
-      <OvertimeCalculator />
+      <div className="print:hidden"><OvertimeCalculator /></div>
 
       <DisclaimerBanner />
 
       {/* AI CTA strip */}
-      <div className="flex items-center justify-between gap-4 flex-wrap bg-navy-50 border border-navy-100 rounded-2xl px-5 py-4">
+      <div className="print:hidden flex items-center justify-between gap-4 flex-wrap bg-navy-50 border border-navy-100 rounded-2xl px-5 py-4">
         <div className="flex items-center gap-3">
           <span className="w-11 h-11 rounded-[13px] bg-gradient-to-br from-navy-600 to-navy-900 flex items-center justify-center text-white shrink-0">
             <MessageCircle size={22} strokeWidth={1.75} />
@@ -394,18 +512,20 @@ export default function CheckResultPage() {
 
       {/* AI 進一步詢問：開源版走複製提示詞流程 */}
       {IS_OPENSOURCE ? (
-        <OpenSourceAiButtons
-          prompt={buildResultPrompt(result)}
-          title="🤖 用 AI 律師詳細分析這份結果"
-        />
+        <div className="print:hidden">
+          <OpenSourceAiButtons
+            prompt={buildResultPrompt(result)}
+            title="🤖 用 AI 律師詳細分析這份結果"
+          />
+        </div>
       ) : null}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 print:hidden">
         <Link
           href="/check"
           className="flex-1 py-3 text-center border border-line rounded-xl text-sm font-medium text-muted hover:bg-card"
         >
-          重新輸入
+          修改資料（會帶入剛才填的）
         </Link>
       </div>
     </div>

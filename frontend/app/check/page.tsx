@@ -44,6 +44,24 @@ const TAIWAN_HOLIDAYS: Record<string, string> = {
   "2026-10-09": "國慶日（補假）",      // 10/10 週六 → 補假移至 10/9 週五
 };
 
+const FORM_KEY = "checkForm";
+
+/** sessionStorage 裡的表單暫存格式；改欄位時把 v 加一，舊格式就會被忽略 */
+interface SavedForm {
+  v: 1;
+  employmentType: CheckRequest["employment_type"];
+  selectedDates: string[];
+  defaultShift: ShiftConfig;
+  overrides: [string, Partial<ShiftConfig>][];
+  agreedOtDates: string[];
+  holidayOverrides: Record<string, string>;
+  hourlyRegular: string;
+  hourlyHoliday: string;
+  otPayStatus: NonNullable<CheckRequest["ot_pay_status"]>;
+  weeksPast: number;
+  weeksFuture: number;
+}
+
 interface ShiftConfig {
   clock_in: string;
   clock_out: string;
@@ -174,8 +192,12 @@ export default function CheckPage() {
   // 進表單就先叫醒後端，送出時才不用等 20～30 秒（見 lib/api.ts wakeBackend）
   useEffect(() => { wakeBackend(); }, []);
 
+  // 從已存的表單還原時，不要讓下面這個 effect 把使用者自己填的休息分鐘蓋掉
+  const skipBreakResetRef = useRef(false);
+
   // C-4：時薪制預設休息時間自動改為 30 分鐘；月薪制恢復 60 分鐘
   useEffect(() => {
+    if (skipBreakResetRef.current) { skipBreakResetRef.current = false; return; }
     setDefaultShift((s) => ({
       ...s,
       break_minutes: employmentType === "hourly" ? 30 : 60,
@@ -194,6 +216,60 @@ export default function CheckPage() {
   const [otPayStatus, setOtPayStatus] = useState<NonNullable<CheckRequest["ot_pay_status"]>>("unknown");
   // 約定休息日加班：使用者明確標記「這天是與雇主約定的合法休息日加班」
   const [agreedOtDates, setAgreedOtDates] = useState<Set<string>>(new Set());
+
+  // ── 表單暫存（只存在這個分頁的 sessionStorage，關掉分頁就消失，不送到任何伺服器）──
+  // ⛔ 2026-11 修正前：從結果頁按上一頁或「重新輸入」，填好的十幾天出勤全部清空，
+  //    只想改一天也得從頭重填。
+  const [restored, setRestored] = useState(false);
+  const [restoredBanner, setRestoredBanner] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(FORM_KEY);
+      if (raw) {
+        const f = JSON.parse(raw) as SavedForm;
+        if (f.v === 1 && f.selectedDates?.length) {
+          if (f.employmentType !== "monthly_salary") skipBreakResetRef.current = true;
+          setEmploymentType(f.employmentType);
+          setSelectedDates(new Set(f.selectedDates));
+          setDefaultShift(f.defaultShift);
+          setOverrides(new Map(f.overrides));
+          setAgreedOtDates(new Set(f.agreedOtDates));
+          setHolidayOverrides(f.holidayOverrides);
+          setHourlyRegular(f.hourlyRegular);
+          setHourlyHoliday(f.hourlyHoliday);
+          setOtPayStatus(f.otPayStatus);
+          setWeeksPast((w) => Math.max(w, f.weeksPast));
+          setWeeksFuture((w) => Math.max(w, f.weeksFuture));
+          setRestoredBanner(true);
+        }
+      }
+    } catch { /* 存檔壞掉就當作沒有 */ }
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;  // 還原完成前不要寫，否則會先用空表單蓋掉存檔
+    const f: SavedForm = {
+      v: 1, employmentType, selectedDates: Array.from(selectedDates), defaultShift,
+      overrides: Array.from(overrides.entries()), agreedOtDates: Array.from(agreedOtDates),
+      holidayOverrides, hourlyRegular, hourlyHoliday, otPayStatus, weeksPast, weeksFuture,
+    };
+    try { sessionStorage.setItem(FORM_KEY, JSON.stringify(f)); } catch { /* 私密模式等 */ }
+  }, [restored, employmentType, selectedDates, defaultShift, overrides, agreedOtDates,
+      holidayOverrides, hourlyRegular, hourlyHoliday, otPayStatus, weeksPast, weeksFuture]);
+
+  function resetForm() {
+    try { sessionStorage.removeItem(FORM_KEY); } catch { /* ignore */ }
+    setEmploymentType("monthly_salary");
+    setDefaultShift(DEFAULT_SHIFT);
+    setHolidayOverrides({});
+    setHourlyRegular("");
+    setHourlyHoliday("");
+    setOtPayStatus("unknown");
+    clearAll();
+    setRestoredBanner(false);
+    setStep(0);
+  }
 
   // 即時偵測例假/休息日（給 Step 1 月曆視覺提示用）
   const liveRest = useMemo(
@@ -343,6 +419,18 @@ export default function CheckPage() {
         <h1 className="text-2xl font-black text-ink">你今天有沒有被坑？</h1>
         <p className="text-[15px] text-muted mt-1">填一週出勤，3 秒幫你算可能短少的薪水與假日</p>
       </div>
+
+      {restoredBanner && (
+        <div className="flex items-center justify-between gap-3 bg-navy-50 border border-navy-100 rounded-xl px-4 py-3 text-sm">
+          <span className="text-navy-700">
+            已帶入你剛才填的資料（{selectedDates.size} 天），改完再送出就好。
+            <span className="block text-xs text-muted mt-0.5">只存在這個分頁，關掉就消失。</span>
+          </span>
+          <button onClick={resetForm} className="shrink-0 text-xs font-semibold text-muted underline hover:text-ink">
+            清除重填
+          </button>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="flex items-center gap-2">

@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-canvas flex flex-col">
       {/* Desktop top nav */}
-      <header className="hidden md:block bg-gradient-to-r from-navy-800 to-navy-900 shadow-md">
+      <header className="hidden md:block print:!hidden bg-gradient-to-r from-navy-800 to-navy-900 shadow-md">
         <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 text-white">
             <BrandMark size={34} />
@@ -58,17 +58,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Mobile top bar */}
-      <header className="md:hidden bg-gradient-to-r from-navy-800 to-navy-900 px-4 py-3 flex items-center gap-2.5 text-white">
+      <header className="md:hidden print:hidden bg-gradient-to-r from-navy-800 to-navy-900 px-4 py-3 flex items-center gap-2.5 text-white">
         <BrandMark size={30} />
         <span className="font-black">勞基法小幫手</span>
       </header>
 
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 pb-24 md:pb-6">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 pb-24 md:pb-6 print:p-0">
         {children}
       </main>
 
       {/* Mobile bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-line flex safe-area-pb">
+      <nav className="md:hidden print:hidden fixed bottom-0 inset-x-0 bg-card border-t border-line flex safe-area-pb">
         {navItems.map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
