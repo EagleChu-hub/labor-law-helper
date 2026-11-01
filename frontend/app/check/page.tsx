@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { User, Clock, Users, Coins, ChevronRight, Loader2 } from "lucide-react";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
+import { wakeBackend } from "@/lib/api";
 import type { AttendanceRecord, CheckRequest } from "@/types";
 
 const STEPS = ["雇用類型", "出勤紀錄", "確認送出"];
@@ -169,6 +170,9 @@ export default function CheckPage() {
   const [employmentType, setEmploymentType] = useState<CheckRequest["employment_type"]>("monthly_salary");
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [defaultShift, setDefaultShift] = useState<ShiftConfig>(DEFAULT_SHIFT);
+
+  // 進表單就先叫醒後端，送出時才不用等 20～30 秒（見 lib/api.ts wakeBackend）
+  useEffect(() => { wakeBackend(); }, []);
 
   // C-4：時薪制預設休息時間自動改為 30 分鐘；月薪制恢復 60 分鐘
   useEffect(() => {
@@ -343,12 +347,12 @@ export default function CheckPage() {
       {/* Stepper */}
       <div className="flex items-center gap-2">
         {STEPS.map((label, i) => (
-          <div key={i} className="flex items-center gap-2.5">
-            <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-sm font-bold font-sora ${i <= step ? "bg-navy text-white" : "bg-card border-2 border-line text-muted"}`}>
+          <div key={i} className="flex items-center gap-1.5 sm:gap-2.5">
+            <div className={`shrink-0 w-[30px] h-[30px] rounded-full flex items-center justify-center text-sm font-bold font-sora ${i <= step ? "bg-navy text-white" : "bg-card border-2 border-line text-muted"}`}>
               {i < step ? "✓" : i + 1}
             </div>
-            <span className={`text-sm ${i === step ? "text-navy font-bold" : "text-muted font-medium"}`}>{label}</span>
-            {i < STEPS.length - 1 && <div className="h-0.5 bg-line w-6" />}
+            <span className={`whitespace-nowrap text-[13px] sm:text-sm ${i === step ? "text-navy font-bold" : "text-muted font-medium"}`}>{label}</span>
+            {i < STEPS.length - 1 && <div className="h-0.5 bg-line w-3 sm:w-6" />}
           </div>
         ))}
       </div>
@@ -572,10 +576,12 @@ export default function CheckPage() {
               ref={calendarScrollRef}
               className="max-h-80 overflow-y-auto border border-line rounded-lg"
             >
-              <table className="w-full text-center select-none">
+              {/* ⛔ 2026-11 修正前按鈕固定 40px：7 欄＋月份欄要 340px，手機上日曆框只有 285px，
+                  週日整欄被切掉、週六切一半。改為 table-fixed＋按鈕隨欄寬縮放（上限 40px）。 */}
+              <table className="w-full table-fixed text-center select-none">
                 <thead className="sticky top-0 bg-card z-10">
                   <tr>
-                    <th className="w-8" />
+                    <th className="w-7 sm:w-8" />
                     {WEEKDAY_HEADER.map((h) => (
                       <th key={h} className="py-1 text-[11px] text-muted font-medium">{h}</th>
                     ))}
@@ -630,7 +636,7 @@ export default function CheckPage() {
                                   : undefined
                                 }
                                 className={[
-                                  "relative w-10 h-10 rounded-lg font-medium transition-colors",
+                                  "relative block mx-auto w-full max-w-[2.5rem] aspect-square rounded-lg font-medium transition-colors",
                                   isFirstDay ? "text-[9px]" : "text-xs",
                                   // 選取狀態（最優先）
                                   isSel && isAgreedOt ? "bg-orange-500 text-white shadow-sm ring-2 ring-orange-300" : "",
@@ -848,13 +854,13 @@ export default function CheckPage() {
           )}
 
           <div className="flex gap-3">
-            <button onClick={() => setStep(0)} className="flex-1 py-3 border border-line rounded-xl text-sm font-medium text-muted hover:bg-card">
+            <button onClick={() => setStep(0)} className="shrink-0 px-5 py-3 border border-line rounded-xl text-sm font-medium text-muted hover:bg-card">
               上一步
             </button>
             <button
               onClick={goToStep2}
               disabled={selectedDates.size === 0}
-              className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-b from-navy-600 to-navy-800 text-white py-3 rounded-xl font-bold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="flex-1 min-w-0 whitespace-nowrap flex items-center justify-center gap-2 bg-gradient-to-b from-navy-600 to-navy-800 text-white py-3 rounded-xl font-bold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               下一步（已選 {selectedDates.size} 天）<ChevronRight size={17} />
             </button>

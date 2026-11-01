@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, BookOpen } from "lucide-react";
-import { lawSearch } from "@/lib/api";
+import { lawSearch, warmLawSearch } from "@/lib/api";
+import { WakeNotice } from "@/components/shared/WakeNotice";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import type { LawSearchResult } from "@/types";
 
@@ -21,6 +22,9 @@ export default function LawPage() {
   const [activeTopic, setActiveTopic] = useState("全部");
   const [results, setResults] = useState<LawSearchResult[] | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // 進頁面就先查一次，讓第一次搜尋不用等索引建立（見 lib/api.ts warmLawSearch）
+  useEffect(() => { warmLawSearch(); }, []);
 
   async function handleSearch(q?: string) {
     const searchQ = q ?? query;
@@ -79,6 +83,7 @@ export default function LawPage() {
       </div>
 
       {/* Results */}
+      {loading && <WakeNotice what="搜尋" />}
       {loading && <LoadingSkeleton lines={5} />}
 
       {results !== null && (

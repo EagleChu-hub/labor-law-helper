@@ -9,6 +9,7 @@ import {
 import { RiskBadge } from "@/components/shared/RiskBadge";
 import { ViolationCard } from "@/components/results/ViolationCard";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
+import { WakeNotice } from "@/components/shared/WakeNotice";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { checkAnalyze } from "@/lib/api";
@@ -192,13 +193,14 @@ export default function CheckResultPage() {
         <div className="bg-warn-soft border border-warn-border rounded-lg p-4 text-sm text-amber-800 flex items-start gap-3">
           <span className="text-xl leading-none">⏳</span>
           <div>
-            <p className="font-semibold">後端正在喚醒中</p>
+            <p className="font-semibold">主機比平常慢，正在自動重試</p>
             <p className="text-xs mt-1 text-amber-700">
-              Render 免費方案冷啟動需約 30 秒。正在自動重試（第 {retryCount + 1} 次 / 最多 3 次）...
+              第 {retryCount + 1} 次重試（最多 3 次），請不要關掉這一頁。
             </p>
           </div>
         </div>
       )}
+      {!coldStartMsg && <WakeNotice />}
       <LoadingSkeleton lines={6} />
     </div>
   );
