@@ -46,6 +46,8 @@ function formatNtd(n: number): string {
   return `NT$ ${Math.round(n).toLocaleString()}`;
 }
 
+const MAX_RETRIES = 4;  // 冷啟動逾時後自動重試的次數（每次 65 秒逾時＋6 秒間隔）
+
 const EMPLOYMENT_LABEL: Record<CheckRequest["employment_type"], string> = {
   monthly_salary: "月薪制", hourly: "時薪制", dispatch: "派遣勞工",
 };
@@ -224,10 +226,20 @@ function OvertimeCalculator() {
 export default function CheckResultPage() {
   const [result, setResult] = useState<CheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // C-3：Render 冷啟動提示 + 自動重試（最多 2 次，每次間隔 6 秒）
+  // C-3：Render 冷啟動提示 + 自動重試（每次間隔 6 秒）
+  // ⛔ 2026-11 實測：push 後 Render 重新部署，連健康檢查都要 64 秒，
+  //    前兩次各在 65 秒逾時，第 3 次（原本的最後一次）才成功——差一點就給勞工看錯誤頁。
+  //    重試由 2 次加到 4 次（最久約 5.5 分鐘），等待期間一直有說明。
   const [retryCount, setRetryCount] = useState(0);
   const [coldStartMsg, setColdStartMsg] = useState(false);
   const [request, setRequest] = useState<CheckRequest | null>(null);
+  const [manualRetry, setManualRetry] = useState(0);  // 錯誤頁按「重試」時遞增，重新跑一輪
+
+  function retryNow() {
+    setError(null);
+    setRetryCount(0);
+    setManualRetry((n) => n + 1);
+  }
 
   useEffect(() => {
     const raw = sessionStorage.getItem("checkRequest");
@@ -240,25 +252,28 @@ export default function CheckResultPage() {
     checkAnalyze(request)
       .then(setResult)
       .catch((e: Error) => {
-        if (e.message === "COLD_START_TIMEOUT" && retryCount < 2) {
+        if (e.message === "COLD_START_TIMEOUT" && retryCount < MAX_RETRIES) {
           setColdStartMsg(true);
           setTimeout(() => {
             setColdStartMsg(false);
             setRetryCount((n) => n + 1); // 觸發 useEffect 重新執行
           }, 6000);
+        } else if (e.message === "COLD_START_TIMEOUT") {
+          // 原本直接 setError(e.message)，畫面會顯示「COLD_START_TIMEOUT」給勞工看
+          setError("主機一直沒有回應，可能暫時故障。你填的資料都還在，請過幾分鐘再按「重試」。");
         } else {
-          setError(e.message);
+          setError("計算時發生錯誤。你填的資料都還在，請稍後按「重試」，或回上一步檢查資料。");
         }
       });
-  }, [retryCount]); // retryCount 改變時重新呼叫 API
+  }, [retryCount, manualRetry]); // retryCount／manualRetry 改變時重新呼叫 API
 
   if (error) return (
     <div>
-      <ErrorState message={error} />
+      <ErrorState message={error} onRetry={request ? retryNow : undefined} />
       {/* 2026-11：原本這裡是死路，連回去的連結都沒有 */}
       <div className="text-center">
         <Link href="/check" className="inline-block px-5 py-2.5 bg-navy text-white rounded-xl text-sm font-bold hover:bg-navy-800">
-          去填出勤資料 →
+          {request ? "回去檢查資料 →" : "去填出勤資料 →"}
         </Link>
       </div>
     </div>
@@ -271,7 +286,7 @@ export default function CheckResultPage() {
           <div>
             <p className="font-semibold">主機比平常慢，正在自動重試</p>
             <p className="text-xs mt-1 text-amber-700">
-              第 {retryCount + 1} 次重試（最多 3 次），請不要關掉這一頁。
+              第 {retryCount + 1} 次重試（最多 {MAX_RETRIES} 次），請不要關掉這一頁。
             </p>
           </div>
         </div>
