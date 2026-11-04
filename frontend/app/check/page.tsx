@@ -189,7 +189,7 @@ export default function CheckPage() {
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [defaultShift, setDefaultShift] = useState<ShiftConfig>(DEFAULT_SHIFT);
 
-  // 進表單就先叫醒後端，送出時才不用等 20～30 秒（見 lib/api.ts wakeBackend）
+  // 進表單就先叫醒後端，送出時才不用等 約 1 分鐘（見 lib/api.ts wakeBackend）
   useEffect(() => { wakeBackend(); }, []);
 
   // 從已存的表單還原時，不要讓下面這個 effect 把使用者自己填的休息分鐘蓋掉

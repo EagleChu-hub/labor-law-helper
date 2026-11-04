@@ -781,6 +781,7 @@ GitHub repo（同一份）
                 NEXT_PUBLIC_MODE=private
 ```
 
-- Render 免費方案閒置 15 分鐘後休眠，冷啟動約 30 秒。前端已內建 65 秒 timeout + 最多 4 次自動重試（PR26）+ 等待提示；Render Build Filters 的 Included Paths 設為 `backend/**`，只改前端或文件不會重新部署後端。
+- Render 免費方案閒置 15 分鐘後休眠，冷啟動實測約 64 秒（2026-11）。前端已內建 65 秒 timeout + 最多 4 次自動重試（PR26）+ 等待提示。
+- Render 的 Root Directory 是 `backend/`：PR24～26 只改前端時，在設定 Build Filters 之前就沒有觸發部署。Build Filters（Included Paths `backend/**`）看起來是多餘的；冷啟動慢是休眠造成，與部署無關。
 - 開源版不打後端 LLM API，但 `/check/analyze` 和 `/law/search` 仍送至 Render（不吃 LLM quota）。
 - 兩個 Vercel 專案指向同一 GitHub repo，只差環境變數，程式碼完全相同。

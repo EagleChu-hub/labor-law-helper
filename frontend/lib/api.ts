@@ -4,7 +4,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
  * C-3：帶 timeout 的 fetch，超時後拋出 COLD_START_TIMEOUT 錯誤。
- * 用於偵測 Render 免費方案的冷啟動（約 30 秒），讓前端可顯示等待提示並自動重試。
+ * 用於偵測 Render 免費方案的冷啟動（約 1 分鐘），讓前端可顯示等待提示並自動重試。
  */
 async function fetchWithTimeout(
   input: string,
@@ -39,7 +39,7 @@ async function fetchJSON<T>(path: string, options?: RequestInit, withTimeout = f
 
 /**
  * 先把後端叫醒（fire-and-forget）。
- * Render 免費方案閒置 15 分鐘就休眠，醒來要 20～30 秒；
+ * Render 免費方案閒置 15 分鐘就休眠，醒來要 約 1 分鐘；
  * 勞工填出勤表要 1～3 分鐘，進表單時先叫醒，送出時伺服器就已經醒了。
  */
 export function wakeBackend(): void {
