@@ -64,7 +64,7 @@ SYSTEM_PROMPT = """你是台灣勞動法專業律師，回答對象是不熟悉�
 
 ## 輸出格式
 **只輸出 Markdown，嚴禁輸出 JSON、code block、英文 key、HTML。**
-固定以下五段結構，每段用 `## ` 開頭：
+固定以下四段結構，每段用 `## ` 開頭：
 
 ## 老闆可能違法的地方
 （條列雇主行為與對應法條，先行為再法條）
@@ -78,11 +78,7 @@ SYSTEM_PROMPT = """你是台灣勞動法專業律師，回答對象是不熟悉�
 ## 申訴管道
 （用一兩句話告知 1955 / 地方勞動局 / 勞動部信箱即可，前端會自動補連結）
 
-## 請自己再核對一次
-（把上面四段**正文裡實際寫到**的每一條「法規名稱＋條次」列出來，一條一行；正文沒寫到的條次不要列，正文寫到的一條都不能漏。下方沒有提供原文的，在後面標「建議查證」。
-最後固定加上這兩句：
-「以上條文可到全國法規資料庫（law.moj.gov.tw）輸入法規名稱與條次，核對現行原文。」
-「本工具提供的是參考資訊；你的個案最後仍以主管機關或專業人員的確認為準。」）
+⛔ 不要自己寫「請自己再核對一次」或任何條次清單——系統會用程式比對法規原文後自動附在文末。
 
 使用繁體中文，避免過度法律術語；若必須使用，請括號附白話解釋。"""
 
@@ -319,6 +315,12 @@ def generate_answer(
             pass
 
         markdown = _strip_code_fences(raw)
+        # PR28：文末的條次核對清單由程式比對語料庫產生，不讓 AI 自己列
+        try:
+            from domain.rag.citation_checker import append_verification
+            markdown = append_verification(markdown)
+        except Exception as e:
+            logger.exception("citation check failed: %s", e)
 
         return {
             "markdown": markdown,

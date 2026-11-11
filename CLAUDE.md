@@ -382,7 +382,7 @@ cd backend
 PYTHONIOENCODING=utf-8 python -m tools.check_law_snippets      # labor_rules.py 的 _ref()
 PYTHONIOENCODING=utf-8 python -m tools.check_frontend_statutes # triageTree.ts 的 STATUTES
 PYTHONIOENCODING=utf-8 python -m tools.check_prose_statutes    # 提示詞散文（PR18 新增）
-pytest tests/ -q                                               # 55 passed（PR23），含硬性迴歸鎖
+pytest tests/ -q                                               # 66 passed（PR28），含硬性迴歸鎖
 ```
 
 ⛔ **PROBLEM／ERROR 必須是 0**。三支都輸出報表而非 pass/fail（「改寫得恰不恰當」要人判斷），
